@@ -313,7 +313,7 @@ void canBusLoop() {
     }
     PacketIdInfoItem *infoItem = canBusPacketIdInfo.findItem(message.identifier, canBusAllowUnknownPackets);
     if (infoItem && infoItem->shouldNotify()) {
-      if (xQueueSend(xQueue1, &message, pdMS_TO_TICKS(10))) {
+      if (xQueueSend(xQueue1, &message, 0)) {
         infoItem->markNotified();
       }
     }
@@ -395,7 +395,7 @@ void taskSimE85(void *arg) {
 }
 
 esp_err_t queue_setup() {
-  xQueue1 = xQueueCreate(32, sizeof(twai_message_t));
+  xQueue1 = xQueueCreate(16, sizeof(twai_message_t));
   if (xQueue1 == 0) {
     ESP_LOGE(TAG, "failed queue setup");
     return ESP_FAIL;
@@ -411,15 +411,22 @@ void setup() {
   esp_log_level_set(TAG, ESP_LOG_DEBUG);
   pinMode(LED_BUILTIN, OUTPUT);
   queue_setup();
-  xTaskCreate(taskSendBle, "BLE messages sender", 4096, nullptr, 0, nullptr);
+  xTaskCreatePinnedToCore(taskSendBle, "BLE messages sender", 4096, nullptr, 0, nullptr, 1);
   ble_setup();
   canBusSetup();
+  xTaskCreatePinnedToCore(taskCanBusLoop, "CAN bus reader", 4096, nullptr, 0, nullptr, 0);
 
   // xTaskCreate(taskSimE85, "simulated E85 canbus", 4096, nullptr, 0, nullptr);
 }
 
+void taskCanBusLoop(void *) {
+  for (;;) {
+    digitalWrite(LED_BUILTIN, HIGH);
+    canBusLoop();
+    digitalWrite(LED_BUILTIN, LOW);
+  }
+}
+
 void loop() {
-  digitalWrite(LED_BUILTIN, HIGH);
-  canBusLoop();
-  digitalWrite(LED_BUILTIN, LOW);
+  delay(1000000);
 }
