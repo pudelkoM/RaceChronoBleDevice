@@ -20,3 +20,7 @@ This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates 
 ![img](images/can_wires.jpg)
 
 ![img](images/racechrono.jpg)
+
+## Credits / References
+- https://github.com/autosportlabs/ESP32-CAN-X2
+- https://github.com/aollin/racechrono-ble-diy-device
