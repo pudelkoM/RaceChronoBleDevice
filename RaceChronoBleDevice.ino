@@ -94,6 +94,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
 
 void ble_setup() {
   BLEDevice::init("💩💯👌😂 hi!");
+  BLEDevice::setPower(ESP_PWR_LVL_P9);
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
   BLEService *pService = pServer->createService(SERVICE_UUID);
@@ -110,9 +111,13 @@ void ble_setup() {
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
   pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
-  pAdvertising->setMinPreferred(0x12);
+  // pAdvertising->setMinPreferred(0x12);
+  pAdvertising->setMaxPreferred(0x40);  // x * 0.625 ms
   BLEDevice::startAdvertising();
   Serial.println("Characteristic defined! Now you can read it in your phone!");
+  Serial.printf("ADV tx power: %d\n", esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_ADV));
+  Serial.printf("SCAN tx power: %d\n", esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_SCAN));
+  Serial.printf("DEFAULT tx power: %d\n", esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_DEFAULT));
 }
 
 void sendCanMsgBle(uint32_t id, uint8_t *data, uint8_t len) {
