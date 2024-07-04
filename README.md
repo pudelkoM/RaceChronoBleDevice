@@ -4,6 +4,8 @@ This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates 
 
 ## TODOs
 
+- [ ] Bluetooth security
+- [ ] Update rate improvements
 
 ## BoM
 
