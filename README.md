@@ -1,5 +1,6 @@
 # CAN Bus Data Logger for RaceChrono
 
+This project is a high-speed Can-Bus datalogger for a BMW Z4 E85. It integrates into the onboard network and feeds data to [RaceChrono](https://racechrono.com/) over Bluetooth Low Energy (BLE).
 
 ## BoM
 
