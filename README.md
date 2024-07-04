@@ -6,6 +6,7 @@ This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates 
 
 - [ ] Bluetooth security
 - [ ] Update rate improvements
+  - [ ] Merge CAN messages?
 - [ ] XY-Axis acceleration data
 
 ## BoM
