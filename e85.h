@@ -7,6 +7,8 @@
 
 // CAN arbitration IDs for known messages.
 static constexpr uint32_t can_asc1_id = 0x153;
+static constexpr uint32_t can_asc2_id = 0x1F0;
+static constexpr uint32_t can_asc3_id = 0x1F3;
 static constexpr uint32_t can_asc4_id = 0x1F8;
 static constexpr uint32_t can_lws1_id = 0x1F5;
 static constexpr uint32_t can_dme1_id = 0x316;
@@ -17,6 +19,8 @@ static constexpr uint32_t can_icl3_id = 0x615;
 
 // Desired update frequencies for a given message. In Hz (1/s).
 static constexpr uint32_t can_asc1_freq = 20; // 10ms(ASC)/20ms(DSC) native
+static constexpr uint32_t can_asc2_freq = 20; // 10ms(ASC)/20ms(DSC) native
+static constexpr uint32_t can_asc3_freq = 20; // 20ms native
 static constexpr uint32_t can_asc4_freq = 20; // 20ms native
 static constexpr uint32_t can_lws1_freq = 10; // 10ms native
 static constexpr uint32_t can_dme1_freq = 20; // 10ms native
@@ -29,6 +33,8 @@ static constexpr uint32_t can_default_freq = 1;
 uint16_t get_notify_interval_ms(uint32_t pid) {
   switch (pid) {
     case can_asc1_id: return 1000 / can_asc1_freq;
+    case can_asc2_id: return 1000 / can_asc2_freq;
+    case can_asc3_id: return 1000 / can_asc3_freq;
     case can_asc4_id: return 1000 / can_asc4_freq;
     case can_lws1_id: return 1000 / can_lws1_freq;
     case can_dme1_id: return 1000 / can_dme1_freq;
