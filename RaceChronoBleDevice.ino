@@ -94,6 +94,8 @@ class MyServerCallbacks : public BLEServerCallbacks {
 
 void ble_setup() {
   BLEDevice::init("💩💯👌😂 hi!");
+  // Set MTU to multiple of 23 + 20?
+  BLEDevice::setMTU(128);
   BLEDevice::setPower(ESP_PWR_LVL_P9);
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
@@ -110,9 +112,9 @@ void ble_setup() {
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(true);
-  pAdvertising->setMinPreferred(0x06);  // functions that help with iPhone connections issue
-  // pAdvertising->setMinPreferred(0x12);
-  pAdvertising->setMaxPreferred(0x40);  // x * 0.625 ms
+  // play around with lower/higher connection interval values.
+  pAdvertising->setMinPreferred(0x06);  // 7.5 ms, minimum connection rate, functions that help with iPhone connections issue
+  pAdvertising->setMaxPreferred(0x08);  // 8 * 1.25 ms = 10 ms = 100 Hz
   BLEDevice::startAdvertising();
   Serial.println("Characteristic defined! Now you can read it in your phone!");
   Serial.printf("ADV tx power: %d\n", esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_ADV));
@@ -129,6 +131,7 @@ void sendCanMsgBle(uint32_t id, uint8_t *data, uint8_t len) {
     buf[3] = (uint8_t)(id >> 24);
     memcpy(buf + 4, data, std::min(len, (uint8_t)16));
     cbMainChar->setValue(buf, sizeof(id) + std::min(len, (uint8_t)16));
+    // check if ready to send with canNotify?
     cbMainChar->notify();
   }
 }
@@ -154,6 +157,7 @@ void canBusSetup() {
     return;
   }
 
+  // Disable CAN alerts?
   uint32_t alerts_to_enable = TWAI_ALERT_TX_IDLE | TWAI_ALERT_TX_SUCCESS | TWAI_ALERT_TX_FAILED | TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR;
   if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
     Serial.println("CAN1 Alerts reconfigured");
