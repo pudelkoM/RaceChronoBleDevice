@@ -94,7 +94,6 @@ class MyServerCallbacks : public BLEServerCallbacks {
 
 void ble_setup() {
   BLEDevice::init("💩💯👌😂 hi!");
-  // Set MTU to multiple of 23 + 20?
   BLEDevice::setMTU(23);
   BLEDevice::setPower(ESP_PWR_LVL_P9);
   BLEServer *pServer = BLEDevice::createServer();
@@ -131,7 +130,6 @@ void sendCanMsgBle(uint32_t id, uint8_t *data, uint8_t len) {
     buf[3] = (uint8_t)(id >> 24);
     memcpy(buf + 4, data, std::min(len, (uint8_t)16));
     cbMainChar->setValue(buf, sizeof(id) + std::min(len, (uint8_t)16));
-    // check if ready to send with canNotify?
     cbMainChar->notify();
   }
 }
@@ -157,7 +155,7 @@ void canBusSetup() {
     return;
   }
 
-  // Disable CAN alerts?
+  // Disable CAN alerts, as we don't act on them anyway.
   // uint32_t alerts_to_enable = TWAI_ALERT_TX_IDLE | TWAI_ALERT_TX_SUCCESS | TWAI_ALERT_TX_FAILED | TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR;
   // if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
   //   Serial.println("CAN1 Alerts reconfigured");
