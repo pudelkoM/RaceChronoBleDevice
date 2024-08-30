@@ -95,7 +95,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
 void ble_setup() {
   BLEDevice::init("💩💯👌😂 hi!");
   // Set MTU to multiple of 23 + 20?
-  BLEDevice::setMTU(128);
+  BLEDevice::setMTU(23);
   BLEDevice::setPower(ESP_PWR_LVL_P9);
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
@@ -114,7 +114,7 @@ void ble_setup() {
   pAdvertising->setScanResponse(true);
   // play around with lower/higher connection interval values.
   pAdvertising->setMinPreferred(0x06);  // 7.5 ms, minimum connection rate, functions that help with iPhone connections issue
-  pAdvertising->setMaxPreferred(0x08);  // 8 * 1.25 ms = 10 ms = 100 Hz
+  pAdvertising->setMaxPreferred(0x06);  // 6 * 1.25 ms = 7.5 ms = ~133 Hz
   BLEDevice::startAdvertising();
   Serial.println("Characteristic defined! Now you can read it in your phone!");
   Serial.printf("ADV tx power: %d\n", esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_ADV));
@@ -158,13 +158,13 @@ void canBusSetup() {
   }
 
   // Disable CAN alerts?
-  uint32_t alerts_to_enable = TWAI_ALERT_TX_IDLE | TWAI_ALERT_TX_SUCCESS | TWAI_ALERT_TX_FAILED | TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR;
-  if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
-    Serial.println("CAN1 Alerts reconfigured");
-  } else {
-    Serial.println("Failed to reconfigure alerts");
-    return;
-  }
+  // uint32_t alerts_to_enable = TWAI_ALERT_TX_IDLE | TWAI_ALERT_TX_SUCCESS | TWAI_ALERT_TX_FAILED | TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR;
+  // if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
+  //   Serial.println("CAN1 Alerts reconfigured");
+  // } else {
+  //   Serial.println("Failed to reconfigure alerts");
+  //   return;
+  // }
 
   // CAN2 setup.
   if (CAN_OK == CAN.begin(CAN_500KBPS)) {

@@ -20,7 +20,7 @@ static constexpr uint32_t can_icl3_id = 0x615;
 // Desired update frequencies for a given message. In Hz (1/s).
 static constexpr uint32_t can_asc1_freq = 20; // 10ms(ASC)/20ms(DSC) native
 static constexpr uint32_t can_asc2_freq = 20; // 10ms(ASC)/20ms(DSC) native
-static constexpr uint32_t can_asc3_freq = 20; // 20ms native
+static constexpr uint32_t can_asc3_freq = 10; // 20ms native
 static constexpr uint32_t can_asc4_freq = 20; // 20ms native
 static constexpr uint32_t can_lws1_freq = 10; // 10ms native
 static constexpr uint32_t can_dme1_freq = 20; // 10ms native
