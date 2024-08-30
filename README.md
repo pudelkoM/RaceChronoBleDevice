@@ -48,10 +48,10 @@ Here are the different rates observed with different settings:
 
 | Connection Prio | Data Rate [Hz] |
 |-----------------|----|
-| default         | xx |
-| HIGH            | xx |
-| BALANCED        | xx |
-| LOW_POWER       | xx |
+| default         | ~45 |
+| HIGH            | >60 |
+| BALANCED        | ~45 |
+| LOW_POWER       | 7 |
 
 ## Credits / References
 - https://github.com/autosportlabs/ESP32-CAN-X2
