@@ -13,6 +13,9 @@
 static const char *TAG = "racechrono_canbus_ble";
 
 #define CAN_POLLING_RATE_MS 1
+#define SERVICE_UUID "00001ff8-0000-1000-8000-00805f9b34fb"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+
 
 MCP_CAN CAN(CS);
 PacketIdInfo canBusPacketIdInfo;
@@ -22,8 +25,6 @@ bool isBleConnected = false;
 BLECharacteristic *cbMainChar = nullptr;
 QueueHandle_t xQueue1;
 
-#define SERVICE_UUID "00001ff8-0000-1000-8000-00805f9b34fb"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
 
 class MyCanbusFilterCallbacks : public BLECharacteristicCallbacks {
