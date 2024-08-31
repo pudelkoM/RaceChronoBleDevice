@@ -124,7 +124,7 @@ void ble_setup() {
 
 void sendCanMsgBle(uint32_t id, uint8_t *data, uint8_t len) {
   if (cbMainChar) {
-    uint8_t buf[20];
+    uint8_t buf[20] = {};
     buf[0] = (uint8_t)(id >> 0);
     buf[1] = (uint8_t)(id >> 8);
     buf[2] = (uint8_t)(id >> 16);
