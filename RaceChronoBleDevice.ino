@@ -414,10 +414,10 @@ void setup() {
   esp_log_level_set(TAG, ESP_LOG_DEBUG);
   pinMode(LED_BUILTIN, OUTPUT);
   queue_setup();
-  xTaskCreatePinnedToCore(taskSendBle, "BLE messages sender", 4096, nullptr, 0, nullptr, 1);
+  xTaskCreatePinnedToCore(taskSendBle, "BLE messages sender", 4096, nullptr, 0, nullptr, 0); // Core 0 has less other stuff running on it.
   ble_setup();
   canBusSetup();
-  xTaskCreatePinnedToCore(taskCanBusLoop, "CAN bus reader", 4096, nullptr, 0, nullptr, 0);
+  xTaskCreatePinnedToCore(taskCanBusLoop, "CAN bus reader", 4096, nullptr, 0, nullptr, 1);
 
   // xTaskCreate(taskSimE85, "simulated E85 canbus", 4096, nullptr, 0, nullptr);
 }
