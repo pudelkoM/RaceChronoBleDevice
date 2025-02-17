@@ -1,6 +1,4 @@
 #include <Arduino.h>
-#include <SPI.h>
-#include <mcp_canbus.h>
 #include <driver/twai.h>
 #include <BLEDevice.h>
 #include <BLEUtils.h>
@@ -17,7 +15,6 @@ static const char *TAG = "racechrono_canbus_ble";
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
 
-MCP_CAN CAN(CS);
 PacketIdInfo canBusPacketIdInfo;
 bool canBusAllowUnknownPackets = false;
 bool isCanBusConnected = false;
@@ -165,14 +162,6 @@ void canBusSetup() {
   //   return;
   // }
 
-  // CAN2 setup.
-  if (CAN_OK == CAN.begin(CAN_500KBPS)) {
-    Serial.println("CAN2 interface started");
-  } else {
-    Serial.println("Failed to start CAN2");
-    return;
-  }
-
   isCanBusConnected = true;
 }
 
@@ -183,7 +172,7 @@ void canBusSetup() {
  * @param [in] length Length of the data (in bytes) to be logged.
  * @return N/A.
  */
-void hexDump(const uint8_t *pData, uint32_t length) {
+static void hexDump(const uint8_t *pData, uint32_t length) {
   char ascii[80];
   char hex[80];
   char tempBuf[80];
@@ -220,7 +209,7 @@ void hexDump(const uint8_t *pData, uint32_t length) {
   }
 }  // hexDump
 
-void dumpTwaiMessage(const twai_message_t &message) {
+static void dumpTwaiMessage(const twai_message_t &message) {
   Serial.print("CAN1: Received ");
   // Process received message
   if (message.extd) {
@@ -257,14 +246,11 @@ void canBusLoop() {
       delay(3000);
       return;
     }
-    // TODO: no restart on CAN2
     // Clear info
     canBusPacketIdInfo.reset();
   } else if (isCanBusConnected && !isBleConnected) {
     // Disconnect from CAN-Bus
     twai_stop();
-    // TODO: not supported on CAN2
-    // CAN.end();
     isCanBusConnected = false;
     Serial.println("Stopped CAN1");
   }
@@ -332,71 +318,6 @@ void taskSendBle(void *) {
   }
 }
 
-void taskSimE85(void *arg) {
-  TickType_t xLastWakeTime;
-  const TickType_t xFrequency = pdMS_TO_TICKS(25);
-  // Initialise the xLastWakeTime variable with the current time.
-  xLastWakeTime = xTaskGetTickCount();
-
-  static uint16_t rpm = 200;
-  static uint16_t oil_temp = 90;
-
-  for (;;) {
-    // Sleep until next interval - time for compute.
-    BaseType_t xWasDelayed = xTaskDelayUntil(&xLastWakeTime, xFrequency);
-    if (xWasDelayed == pdFALSE) {
-      ESP_LOGW(TAG, "sim task was not delayed, i.e. running too long!");
-    }
-
-    // Perform actions here.
-    if (!isBleConnected || !isCanBusConnected) {
-      continue;
-    }
-    twai_message_t msg = {};
-    get_can_asc1_msg2(&msg, 110);
-    if (CAN_OK == CAN.sendMsgBuf(msg.identifier, 0, msg.data_length_code, msg.data)) {
-      ESP_LOGI(TAG, "CAN2: ASC1 message queued for transmission");
-    } else {
-      ESP_LOGE(TAG, "CAN2: Failed to queue message for transmission");
-    }
-    get_can_lws1_msg2(&msg, -360);
-    if (CAN_OK == CAN.sendMsgBuf(msg.identifier, 0, msg.data_length_code, msg.data)) {
-      ESP_LOGI(TAG, "CAN2: LWS1 message queued for transmission");
-    } else {
-      ESP_LOGE(TAG, "CAN2: Failed to queue message for transmission");
-    }
-    get_can_dme1_msg(&msg, rpm);
-    if (CAN_OK == CAN.sendMsgBuf(msg.identifier, 0, msg.data_length_code, msg.data)) {
-      ESP_LOGI(TAG, "CAN2: DME1 message queued for transmission");
-    } else {
-      ESP_LOGE(TAG, "CAN2: Failed to queue message for transmission");
-    }
-    get_can_dme2_msg(&msg, 40, 1024, 50);
-    if (CAN_OK == CAN.sendMsgBuf(msg.identifier, 0, msg.data_length_code, msg.data)) {
-      ESP_LOGI(TAG, "CAN2: DME2 message queued for transmission");
-    } else {
-      ESP_LOGE(TAG, "CAN2: Failed to queue message for transmission");
-    }
-    get_can_dme4_msg(&msg, 85);
-    if (CAN_OK == CAN.sendMsgBuf(msg.identifier, 0, msg.data_length_code, msg.data)) {
-      ESP_LOGI(TAG, "CAN2: DME4 message queued for transmission");
-    } else {
-      ESP_LOGE(TAG, "CAN2: Failed to queue message for transmission");
-    }
-    get_can_icl3_msg(&msg, 21);
-    if (CAN_OK == CAN.sendMsgBuf(msg.identifier, 0, msg.data_length_code, msg.data)) {
-      ESP_LOGI(TAG, "CAN2: ICL3 message queued for transmission");
-    } else {
-      ESP_LOGE(TAG, "CAN2: Failed to queue message for transmission");
-    }
-
-    rpm++;
-  }
-
-
-  vTaskDelete(nullptr);
-}
-
 esp_err_t queue_setup() {
   xQueue1 = xQueueCreate(16, sizeof(twai_message_t));
   if (xQueue1 == 0) {
@@ -418,8 +339,6 @@ void setup() {
   ble_setup();
   canBusSetup();
   xTaskCreatePinnedToCore(taskCanBusLoop, "CAN bus reader", 4096, nullptr, 0, nullptr, 1);
-
-  // xTaskCreate(taskSimE85, "simulated E85 canbus", 4096, nullptr, 0, nullptr);
 }
 
 void taskCanBusLoop(void *) {
