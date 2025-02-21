@@ -11,7 +11,8 @@ struct foo {
 };
 
 #define queueType struct foo
-#define queueTypeInit {}
+#define queueTypeInit \
+  { 0 }
 #define queueSize 8
 
 // Results:
