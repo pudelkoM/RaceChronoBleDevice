@@ -5,6 +5,7 @@ This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates 
 ## TODOs
 
 - [ ] High-speed GPS module
+- [ ] Upload 3d printed enclosure .stl files and pictures
 - [ ] Bluetooth security
 - [ ] Update rate improvements
   - [ ] Merge CAN messages?
