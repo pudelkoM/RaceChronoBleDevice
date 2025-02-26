@@ -16,6 +16,7 @@ This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates 
 
 - ASL [ESP32-CAN-X2](https://www.autosportlabs.com/product/esp32-can-x2-dual-can-bus-automotive-grade-development-board/)
 - Tulay's Wire Werks [E46 CAN-Bus Plug and Play Adapter](https://tulayswirewerks.com/product/e46-can-bus-plug-and-play-adapter-4-pin-ign/)
+- [3D printed enclosure](3d_printing) (SLS nylon)
 
 ## Pictures
 
@@ -23,7 +24,7 @@ This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates 
 
 ![img](images/can_wires.jpg)
 
-![img](images/racechrono.jpg)
+![img](images/racechrono_fast.png)
 
 ## Achieving high BLE notification throughput
 
@@ -36,6 +37,7 @@ To achieve high CAN message throughput, the following things should be considere
 - Set the TX power to a high enough setting, depending on distance to phone
 - Filter out uninteresting CAN ARBIDs in hardware
 - Set BLE MTU higher than message size + 4
+- Request HIGH connection priority on the client side
 
 ## Android connection priority / BLE connection interval
 
