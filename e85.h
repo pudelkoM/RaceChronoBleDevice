@@ -18,15 +18,15 @@ static constexpr uint32_t can_dme4_id = 0x545;
 static constexpr uint32_t can_icl3_id = 0x615;
 
 // Desired update frequencies for a given message. In Hz (1/s).
-static constexpr uint32_t can_asc1_freq = 20; // 10ms(ASC)/20ms(DSC) native
-static constexpr uint32_t can_asc2_freq = 20; // 10ms(ASC)/20ms(DSC) native
-static constexpr uint32_t can_asc3_freq = 10; // 20ms native
-static constexpr uint32_t can_asc4_freq = 20; // 20ms native
-static constexpr uint32_t can_lws1_freq = 10; // 10ms native
-static constexpr uint32_t can_dme1_freq = 20; // 10ms native
+static constexpr uint32_t can_asc1_freq = 50; // 10ms(ASC)/20ms(DSC) native
+static constexpr uint32_t can_asc2_freq = 50; // 10ms(ASC)/20ms(DSC) native
+static constexpr uint32_t can_asc3_freq = 50; // 20ms native
+static constexpr uint32_t can_asc4_freq = 50; // 20ms native
+static constexpr uint32_t can_lws1_freq = 50; // 10ms native
+static constexpr uint32_t can_dme1_freq = 50; // 10ms native
 static constexpr uint32_t can_dme2_freq = 10; // 10ms native
 static constexpr uint32_t can_dme3_freq = 1;  // 1000ms native
-static constexpr uint32_t can_dme4_freq = 1;  // 10ms native
+static constexpr uint32_t can_dme4_freq = 10;  // 10ms native
 static constexpr uint32_t can_icl3_freq = 1;  // 200ms native
 static constexpr uint32_t can_default_freq = 1;
 
