@@ -7,6 +7,7 @@
 #include "e85.h"
 // #define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 #include <esp_log.h>
+#include "esp_gatt_common_api.h"
 
 static const char *TAG = "racechrono_canbus_ble";
 
@@ -19,10 +20,156 @@ PacketIdInfo canBusPacketIdInfo;
 bool canBusAllowUnknownPackets = false;
 bool isCanBusConnected = false;
 bool isBleConnected = false;
+uint16_t conn_id = 0;  // Only valid when isBleConnected is true.
 BLECharacteristic *cbMainChar = nullptr;
 QueueHandle_t xQueue1;
 
 
+// class CanPidFilter {
+//   private:
+//   std::vector
+// };
+
+static bool canPidAllowed(uint32_t pid) {
+  switch (pid) {
+    case can_asc1_id:
+    case can_asc2_id:
+    case can_asc3_id:
+    case can_asc4_id:
+    case can_lws1_id:
+    case can_dme1_id:
+    case can_dme2_id:
+    case can_dme3_id:
+    case can_dme4_id:
+    case can_icl3_id:
+      return true;
+  }
+
+  return false;
+}
+
+
+struct last_notifs {
+  uint32_t asc1;
+  uint32_t asc2;
+  uint32_t asc3;
+  uint32_t asc4;
+  uint32_t lws1;
+  uint32_t dme1;
+  uint32_t dme2;
+  uint32_t dme3;
+  uint32_t dme4;
+  uint32_t icl3;
+};
+
+static struct last_notifs last_notifs = {};
+
+static void markNotified(uint32_t pid) {
+  switch (pid) {
+    case can_asc1_id:
+      last_notifs.asc1 = millis();
+      break;
+    case can_asc2_id:
+      last_notifs.asc2 = millis();
+      break;
+    case can_asc3_id:
+      last_notifs.asc3 = millis();
+      break;
+    case can_asc4_id:
+      last_notifs.asc4 = millis();
+      break;
+    case can_lws1_id:
+      last_notifs.lws1 = millis();
+      break;
+    case can_dme1_id:
+      last_notifs.dme1 = millis();
+      break;
+    case can_dme2_id:
+      last_notifs.dme2 = millis();
+      break;
+    case can_dme3_id:
+      last_notifs.dme3 = millis();
+      break;
+    case can_dme4_id:
+      last_notifs.dme4 = millis();
+      break;
+    case can_icl3_id:
+      last_notifs.icl3 = millis();
+      break;
+    default:
+      break;
+  }
+}
+
+static bool canPidAllowedTimed(uint32_t pid) {
+  switch (pid) {
+    case can_asc1_id:
+      return millis() - last_notifs.asc1 > get_notify_interval_ms(can_asc1_id);
+    // case can_asc2_id:
+    //   return millis() - last_notifs.asc2 > get_notify_interval_ms(can_asc2_id);
+    // case can_asc3_id:
+    //   return millis() - last_notifs.asc3 > get_notify_interval_ms(can_asc3_id);
+    // case can_asc4_id:
+    //   return millis() - last_notifs.asc4 > get_notify_interval_ms(can_asc4_id);
+    // case can_lws1_id:
+    //   return millis() - last_notifs.lws1 > get_notify_interval_ms(can_lws1_id);
+    // case can_dme1_id:
+    //   return millis() - last_notifs.dme1 > get_notify_interval_ms(can_dme1_id);
+    // case can_dme2_id:
+    //   return millis() - last_notifs.dme2 > get_notify_interval_ms(can_dme2_id);
+    // case can_dme3_id:
+    //   return millis() - last_notifs.dme3 > get_notify_interval_ms(can_dme3_id);
+    // case can_dme4_id:
+    //   return millis() - last_notifs.dme4 > get_notify_interval_ms(can_dme4_id);
+    // case can_icl3_id:
+    //   return millis() - last_notifs.icl3 > get_notify_interval_ms(can_icl3_id);
+    default:
+      return false;
+  }
+}
+
+
+// fix: 16:38:18.747 -> E (92693) BT_L2CAP: l2ble_update_att_acl_pkt_num not found p_tcb
+
+// Stats and counters
+static uint64_t ble_notify_count = 0;
+static uint64_t ble_no_tx_buf_evt_count = 0;
+static uint64_t can_rx_count = 0;
+static uint64_t can_not_interested_count = 0;
+static uint64_t can_queue_enqueue_count = 0;
+static uint64_t can_queue_full_count = 0;
+
+void stats() {
+  static uint64_t last_ble_notify_count = 0;
+  static uint64_t last_ble_no_tx_buf_evt_count = 0;
+  static uint64_t last_can_rx_count = 0;
+  static uint64_t last_can_not_interested_count = 0;
+  static uint64_t last_can_queue_enqueue_count = 0;
+  static uint64_t last_can_queue_full_count = 0;
+
+  uint64_t diff_ble_notify_count = ble_notify_count - last_ble_notify_count;
+  uint64_t diff_ble_no_tx_buf_evt_count = ble_no_tx_buf_evt_count - last_ble_no_tx_buf_evt_count;
+  uint64_t diff_can_rx_count = can_rx_count - last_can_rx_count;
+  uint64_t diff_can_not_interested_count = can_not_interested_count - last_can_not_interested_count;
+  uint64_t diff_can_queue_enqueue_count = can_queue_enqueue_count - last_can_queue_enqueue_count;
+  uint64_t diff_can_queue_full_count = can_queue_full_count - last_can_queue_full_count;
+
+  last_ble_notify_count = ble_notify_count;
+  last_ble_no_tx_buf_evt_count = ble_no_tx_buf_evt_count;
+  last_can_rx_count = can_rx_count;
+  last_can_not_interested_count = can_not_interested_count;
+  last_can_queue_enqueue_count = can_queue_enqueue_count;
+  last_can_queue_full_count = can_queue_full_count;
+
+  Serial.printf("ble_notify_count/s %llu, ", diff_ble_notify_count);
+  Serial.printf("ble_notify_bytes/s %llu, ", diff_ble_notify_count * sizeof(twai_message_t));
+  Serial.printf("ble_no_tx_buf_evt_count/s %llu, ", diff_ble_no_tx_buf_evt_count);
+  Serial.printf("can_rx_count/s %llu, ", diff_can_rx_count);
+  Serial.printf("can_not_interested_count/s %llu, ", diff_can_not_interested_count);
+  Serial.printf("can_queue_enqueue_count/s %llu, ", diff_can_queue_enqueue_count);
+  Serial.printf("can_queue_full_count/s %llu, ", diff_can_queue_full_count);
+  Serial.println("");
+}
 
 class MyCanbusFilterCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
@@ -78,6 +225,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *pServer) {
     Serial.println("Device connected!");
     ESP_LOGI(TAG, "Device connected!");
+    conn_id = pServer->getConnId();
     isBleConnected = true;
   };
 
@@ -85,6 +233,7 @@ class MyServerCallbacks : public BLEServerCallbacks {
     Serial.println("Device disconnected. Start Advertising!");
     ESP_LOGI(TAG, "Device disconnected. Start Advertising!");
     isBleConnected = false;
+    conn_id = 0;
     BLEDevice::startAdvertising();
   }
 };
@@ -92,8 +241,19 @@ class MyServerCallbacks : public BLEServerCallbacks {
 
 void ble_setup() {
   BLEDevice::init("💩💯👌😂 hi!");
-  BLEDevice::setMTU(23);
-  BLEDevice::setPower(ESP_PWR_LVL_P9);
+  BLEDevice::setMTU(517);
+  // N24:  xx tx/s
+  //  N0:  xx tx/s
+  // P21: 800 tx/s
+  BLEDevice::setPower(ESP_PWR_LVL_P21);
+  BLEDevice::setPower(ESP_PWR_LVL_P21);
+  BLEDevice::setPower(ESP_PWR_LVL_P21, ESP_BLE_PWR_TYPE_CONN_HDL0);
+  // 1M: 660 tx/s
+  // 2M: 800 tx/s
+  // Coded: 450 tx/s, but very few drops, nearly 400 rx/s on phone
+  ESP_ERROR_CHECK(esp_ble_gap_set_preferred_default_phy(
+    ESP_BLE_GAP_PHY_2M_PREF_MASK,
+    ESP_BLE_GAP_PHY_2M_PREF_MASK));
   BLEServer *pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
   BLEService *pService = pServer->createService(SERVICE_UUID);
@@ -114,22 +274,37 @@ void ble_setup() {
   pAdvertising->setMaxPreferred(0x06);  // 6 * 1.25 ms = 7.5 ms = ~133 Hz
   BLEDevice::startAdvertising();
   Serial.println("Characteristic defined! Now you can read it in your phone!");
+  Serial.printf("CONN1 tx power: %d\n", esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_CONN_HDL0));
   Serial.printf("ADV tx power: %d\n", esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_ADV));
   Serial.printf("SCAN tx power: %d\n", esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_SCAN));
   Serial.printf("DEFAULT tx power: %d\n", esp_ble_tx_power_get(ESP_BLE_PWR_TYPE_DEFAULT));
 }
 
 void sendCanMsgBle(uint32_t id, uint8_t *data, uint8_t len) {
-  if (cbMainChar) {
-    uint8_t buf[20] = {};
-    buf[0] = (uint8_t)(id >> 0);
-    buf[1] = (uint8_t)(id >> 8);
-    buf[2] = (uint8_t)(id >> 16);
-    buf[3] = (uint8_t)(id >> 24);
-    memcpy(buf + 4, data, std::min(len, (uint8_t)16));
-    cbMainChar->setValue(buf, sizeof(id) + std::min(len, (uint8_t)16));
-    cbMainChar->notify();
+  if (!isBleConnected) {
+    return;
   }
+  if (!cbMainChar) {
+    return;
+  }
+  // int free_buff_num = esp_ble_get_cur_sendable_packets_num(conn_id);
+  // if (free_buff_num == 0) {
+  //   vTaskDelay(10 / portTICK_PERIOD_MS);
+  //   return;
+  // }
+  while (esp_ble_get_cur_sendable_packets_num(conn_id) == 0) {
+    ++ble_no_tx_buf_evt_count;
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+  }
+  uint8_t buf[20] = {};
+  buf[0] = (uint8_t)(id >> 0);
+  buf[1] = (uint8_t)(id >> 8);
+  buf[2] = (uint8_t)(id >> 16);
+  buf[3] = (uint8_t)(id >> 24);
+  memcpy(buf + 4, data, std::min(len, (uint8_t)16));
+  cbMainChar->setValue(buf, sizeof(id) + std::min(len, (uint8_t)16));
+  cbMainChar->notify();
+  ++ble_notify_count;
 }
 
 void canBusSetup() {
@@ -137,7 +312,15 @@ void canBusSetup() {
   Serial.println("Initializing builtin CAN peripheral");
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CAN1_TX, (gpio_num_t)CAN1_RX, TWAI_MODE_LISTEN_ONLY /*TWAI_MODE_NORMAL*/);
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
-  twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+
+  // no filter: 927 msg/s, with filter: 907 msg/s
+  // twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+  twai_filter_config_t f_config = {
+    .acceptance_code = ((0x0100 << 3) << 16) | (0x0400 << 3),
+    .acceptance_mask = 0xF7FFDFFF,
+    .single_filter = false,
+  };
+
 
   if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
     Serial.println("CAN1 Driver initialized");
@@ -257,9 +440,10 @@ void canBusLoop() {
 
   // Handle CAN-Bus data
   if (!isCanBusConnected) {  // TODO: use driver status as flag
+    vTaskDelay(pdMS_TO_TICKS(500));
     return;
   }
-  // check if alert happened
+  // // check if alert happened
   // uint32_t alerts_triggered;
   // twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(CAN_POLLING_RATE_MS));
   // twai_status_info_t twaistatus;
@@ -297,15 +481,42 @@ void canBusLoop() {
   twai_message_t message;
   while (twai_receive(&message, pdMS_TO_TICKS(CAN_POLLING_RATE_MS)) == ESP_OK) {
     // dumpTwaiMessage(message);
+    ++can_rx_count;
     if (message.rtr) {
+      ++can_not_interested_count;
       continue;
     }
-    PacketIdInfoItem *infoItem = canBusPacketIdInfo.findItem(message.identifier, canBusAllowUnknownPackets);
-    if (infoItem && infoItem->shouldNotify()) {
-      if (xQueueSend(xQueue1, &message, 0)) {
-        infoItem->markNotified();
-      }
+
+    // 907 rx/s, 201 msg/s sent
+    // PacketIdInfoItem *infoItem = canBusPacketIdInfo.findItem(message.identifier, canBusAllowUnknownPackets);
+    // if (!infoItem || !infoItem->shouldNotify()) {
+    //   ++can_not_interested_count;
+    //   continue;
+    // }
+
+    // if (infoItem && infoItem->shouldNotify()) {
+
+    // 800 tx/s, 10-20 msg/s queue full drops
+    if (!canPidAllowed(message.identifier)) {
+      ++can_not_interested_count;
+      continue;
     }
+
+    // if (!canPidAllowedTimed(message.identifier)) {
+    //   ++can_not_interested_count;
+    //   continue;
+    // }
+
+    if (xQueueSend(xQueue1, &message, 0)) {
+      // infoItem->markNotified();
+      // markNotified(message.identifier);
+      ++can_queue_enqueue_count;
+    } else {
+      ++can_queue_full_count;
+    }
+    // } else {
+    //   ++can_not_interested_count;
+    // }
   }
 }
 
@@ -318,8 +529,21 @@ void taskSendBle(void *) {
   }
 }
 
+void taskPrintStats(void *) {
+  TickType_t xLastWakeTime;
+  const TickType_t xFrequency = pdMS_TO_TICKS(1000);
+  xLastWakeTime = xTaskGetTickCount();
+  for (;;) {
+    BaseType_t xWasDelayed = xTaskDelayUntil(&xLastWakeTime, xFrequency);
+    if (xWasDelayed == pdFALSE) {
+      ESP_LOGW(TAG, "stats task was not delayed, i.e. running too long!");
+    }
+    stats();
+  }
+}
+
 esp_err_t queue_setup() {
-  xQueue1 = xQueueCreate(16, sizeof(twai_message_t));
+  xQueue1 = xQueueCreate(8, sizeof(twai_message_t));
   if (xQueue1 == 0) {
     ESP_LOGE(TAG, "failed queue setup");
     return ESP_FAIL;
@@ -335,10 +559,11 @@ void setup() {
   esp_log_level_set(TAG, ESP_LOG_DEBUG);
   pinMode(LED_BUILTIN, OUTPUT);
   queue_setup();
-  xTaskCreatePinnedToCore(taskSendBle, "BLE messages sender", 4096, nullptr, 0, nullptr, 0); // Core 0 has less other stuff running on it.
+  xTaskCreatePinnedToCore(taskSendBle, "BLE messages sender", 16384, nullptr, 2, nullptr, 0);  // Core 0 has less other stuff running on it.
   ble_setup();
   canBusSetup();
-  xTaskCreatePinnedToCore(taskCanBusLoop, "CAN bus reader", 4096, nullptr, 0, nullptr, 1);
+  xTaskCreatePinnedToCore(taskCanBusLoop, "CAN bus reader", 16384, nullptr, 2, nullptr, 1);
+  xTaskCreatePinnedToCore(taskPrintStats, "Statistics printer", 16384, nullptr, 1, nullptr, 1);
 }
 
 void taskCanBusLoop(void *) {
