@@ -276,6 +276,8 @@ void canBusSetup() {
   // CAN1 setup.
   Serial.println("Initializing builtin CAN peripheral");
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CAN1_TX, (gpio_num_t)CAN1_RX, TWAI_MODE_LISTEN_ONLY /*TWAI_MODE_NORMAL*/);
+  // The E85 CAN bus transmits about 927 messages per second. With a slightly
+  // longer rx queue, we observed no queue overruns.
   g_config.rx_queue_len = 16;
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
   twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
@@ -301,14 +303,13 @@ void canBusSetup() {
   }
 
   // Disable CAN alerts, as we don't act on them anyway.
-  // TODO: enable alerts and check for overflows
-  uint32_t alerts_to_enable = TWAI_ALERT_TX_IDLE | TWAI_ALERT_TX_SUCCESS | TWAI_ALERT_TX_FAILED | TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR;
-  if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
-    Serial.println("CAN1 Alerts reconfigured");
-  } else {
-    Serial.println("Failed to reconfigure alerts");
-    return;
-  }
+  // uint32_t alerts_to_enable = TWAI_ALERT_TX_IDLE | TWAI_ALERT_TX_SUCCESS | TWAI_ALERT_TX_FAILED | TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR;
+  // if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
+  //   Serial.println("CAN1 Alerts reconfigured");
+  // } else {
+  //   Serial.println("Failed to reconfigure alerts");
+  //   return;
+  // }
 
   isCanBusConnected = true;
 }
@@ -407,10 +408,10 @@ void canBusLoop() {
     return;
   }
   // // check if alert happened
-  uint32_t alerts_triggered;
-  twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(CAN_POLLING_RATE_MS));
-  twai_status_info_t twaistatus;
-  twai_get_status_info(&twaistatus);
+  // uint32_t alerts_triggered;
+  // twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(CAN_POLLING_RATE_MS));
+  // twai_status_info_t twaistatus;
+  // twai_get_status_info(&twaistatus);
 
   // // Handle alerts
   // if (alerts_triggered & TWAI_ALERT_ERR_PASS) {
@@ -426,12 +427,12 @@ void canBusLoop() {
   //   Serial.printf("CAN1: TX error: %d\t", twaistatus.tx_error_counter);
   //   Serial.printf("CAN1: TX failed: %d\n", twaistatus.tx_failed_count);
   // }
-  if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
-    Serial.println("CAN1: Alert: The RX queue is full causing a received frame to be lost.");
-    Serial.printf("CAN1: RX buffered: %d\t", twaistatus.msgs_to_rx);
-    Serial.printf("CAN1: RX missed: %d\t", twaistatus.rx_missed_count);
-    Serial.printf("CAN1: RX overrun %d\n", twaistatus.rx_overrun_count);
-  }
+  // if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
+  //   Serial.println("CAN1: Alert: The RX queue is full causing a received frame to be lost.");
+  //   Serial.printf("CAN1: RX buffered: %d\t", twaistatus.msgs_to_rx);
+  //   Serial.printf("CAN1: RX missed: %d\t", twaistatus.rx_missed_count);
+  //   Serial.printf("CAN1: RX overrun %d\n", twaistatus.rx_overrun_count);
+  // }
   // if (alerts_triggered & TWAI_ALERT_TX_SUCCESS) {
   //   Serial.println("CAN1: Alert: The Transmission was successful.");
   //   Serial.printf("CAN1: TX buffered: %d\n", twaistatus.msgs_to_tx);
@@ -575,7 +576,7 @@ void setup() {
   ble_setup();
   canBusSetup();
   xTaskCreatePinnedToCore(taskCanBusLoop, "CAN bus reader", 16384, nullptr, 2, nullptr, 1);
-  xTaskCreatePinnedToCore(taskReadGPS, "GPS reader and sender", 16384, nullptr, 2, nullptr, 1);
+  xTaskCreatePinnedToCore(taskReadGPS, "GPS reader", 16384, nullptr, 2, nullptr, 1);
   xTaskCreatePinnedToCore(taskPrintStats, "Statistics printer", 16384, nullptr, 1, nullptr, 1);
 }
 #endif
