@@ -4,6 +4,7 @@
 #include <BLEUtils.h>
 #include <BLEServer.h>
 #include "e85.h"
+#include "gps.h"
 // #define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
 #include <esp_log.h>
 #include "esp_gatt_common_api.h"
@@ -20,26 +21,11 @@ bool isCanBusConnected = false;
 bool isBleConnected = false;
 uint16_t conn_id = 0;  // Only valid when isBleConnected is true.
 BLECharacteristic *cbMainChar = nullptr;
+BLECharacteristic *cbGpsMainChar = nullptr;
+BLECharacteristic *cbGpsTimeChar = nullptr;
 QueueHandle_t xQueue1;
+QueueHandle_t xQueueGps;
 
-
-static bool canPidAllowed(uint32_t pid) {
-  switch (pid) {
-    case can_asc1_id:
-    case can_asc2_id:
-    case can_asc3_id:
-    case can_asc4_id:
-    case can_lws1_id:
-    case can_dme1_id:
-    case can_dme2_id:
-    case can_dme3_id:
-    case can_dme4_id:
-    case can_icl3_id:
-      return true;
-  }
-
-  return false;
-}
 
 // Stats and counters
 static uint64_t ble_notify_count = 0;
@@ -48,6 +34,10 @@ static uint64_t can_rx_count = 0;
 static uint64_t can_not_interested_count = 0;
 static uint64_t can_queue_enqueue_count = 0;
 static uint64_t can_queue_full_count = 0;
+static uint64_t gps_line_read_count = 0;
+static uint64_t gps_line_invalid_count = 0;
+static uint64_t gps_queue_enqueue_count = 0;
+static uint64_t gps_queue_full_count = 0;
 
 void stats() {
   static uint64_t last_ble_notify_count = 0;
@@ -56,6 +46,8 @@ void stats() {
   static uint64_t last_can_not_interested_count = 0;
   static uint64_t last_can_queue_enqueue_count = 0;
   static uint64_t last_can_queue_full_count = 0;
+  static uint64_t last_gps_line_read_count = 0;
+  static uint64_t last_gps_line_invalid_count = 0;
 
   uint64_t diff_ble_notify_count = ble_notify_count - last_ble_notify_count;
   uint64_t diff_ble_no_tx_buf_evt_count = ble_no_tx_buf_evt_count - last_ble_no_tx_buf_evt_count;
@@ -63,6 +55,8 @@ void stats() {
   uint64_t diff_can_not_interested_count = can_not_interested_count - last_can_not_interested_count;
   uint64_t diff_can_queue_enqueue_count = can_queue_enqueue_count - last_can_queue_enqueue_count;
   uint64_t diff_can_queue_full_count = can_queue_full_count - last_can_queue_full_count;
+  uint64_t diff_gps_line_read_count = gps_line_read_count - last_gps_line_read_count;
+  uint64_t diff_gps_line_invalid_count = gps_line_invalid_count - last_gps_line_invalid_count;
 
   last_ble_notify_count = ble_notify_count;
   last_ble_no_tx_buf_evt_count = ble_no_tx_buf_evt_count;
@@ -70,6 +64,8 @@ void stats() {
   last_can_not_interested_count = can_not_interested_count;
   last_can_queue_enqueue_count = can_queue_enqueue_count;
   last_can_queue_full_count = can_queue_full_count;
+  last_gps_line_read_count = gps_line_read_count;
+  last_gps_line_invalid_count = gps_line_invalid_count;
 
   Serial.printf("ble_notify_count/s %llu, ", diff_ble_notify_count);
   Serial.printf("ble_notify_bytes/s %llu, ", diff_ble_notify_count * sizeof(twai_message_t));
@@ -78,6 +74,8 @@ void stats() {
   Serial.printf("can_not_interested_count/s %llu, ", diff_can_not_interested_count);
   Serial.printf("can_queue_enqueue_count/s %llu, ", diff_can_queue_enqueue_count);
   Serial.printf("can_queue_full_count/s %llu, ", diff_can_queue_full_count);
+  Serial.printf("gps_line_read_count/s %llu, ", diff_gps_line_read_count);
+  Serial.printf("gps_line_invalid_count/s %llu, ", diff_gps_line_invalid_count);
   Serial.println("");
 }
 
@@ -164,6 +162,14 @@ void ble_setup() {
     BLEUUID((uint16_t)0x02), BLECharacteristic::PROPERTY_WRITE);
   pCanbusFilterCharacteristic->setCallbacks(new MyCanbusFilterCallbacks());
 
+  BLECharacteristic *pGpsMainCharacteristic = pService->createCharacteristic(
+    BLEUUID(uint16_t(0x0003)), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  cbGpsMainChar = pGpsMainCharacteristic;
+
+  BLECharacteristic *pGpsTimeCharacteristic = pService->createCharacteristic(
+    BLEUUID(uint16_t(0x0004)), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  cbGpsTimeChar = pGpsTimeCharacteristic;
+
   pService->start();
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
@@ -201,16 +207,84 @@ void sendCanMsgBle(uint32_t id, uint8_t *data, uint8_t len) {
   ++ble_notify_count;
 }
 
+void sendGpsMsgBle(struct GpsData &data) {
+  if (!isBleConnected) {
+    return;
+  }
+  if (!cbGpsMainChar || !cbGpsTimeChar) {
+    return;
+  }
+  while (esp_ble_get_cur_sendable_packets_num(conn_id) == 0) {
+    ++ble_no_tx_buf_evt_count;
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+  }
+
+  uint8_t buf[20] = {};
+
+  // Sync bits and time from hour start
+  uint32_t timeFromHourStart = (data.minutes * 30000) + (data.seconds * 500) + (data.milliseconds / 2);
+  buf[0] = ((data.gpsSyncBits & 0x7) << 5) | ((timeFromHourStart >> 16) & 0x1F);
+  buf[1] = (timeFromHourStart >> 8) & 0xFF;
+  buf[2] = timeFromHourStart & 0xFF;
+
+  // Fix quality and locked satellites
+  buf[3] = ((std::min<uint8_t>(0x3, data.fixQuality) & 0x3) << 6) | ((std::min<uint8_t>(0x3F, data.numberOfSatellites)) & 0x3F);
+
+  // Latitude
+  buf[4] = (data.latitude >> 24) & 0xFF;
+  buf[5] = (data.latitude >> 16) & 0xFF;
+  buf[6] = (data.latitude >> 8) & 0xFF;
+  buf[7] = data.latitude & 0xFF;
+
+  // Longitude
+  buf[8] = (data.longitude >> 24) & 0xFF;
+  buf[9] = (data.longitude >> 16) & 0xFF;
+  buf[10] = (data.longitude >> 8) & 0xFF;
+  buf[11] = data.longitude & 0xFF;
+
+  // Altitude
+  buf[12] = (data.altitude >> 8) & 0xFF;
+  buf[13] = data.altitude & 0xFF;
+
+  // Speed
+  buf[14] = (data.speedOverGround >> 8) & 0xFF;
+  buf[15] = data.speedOverGround & 0xFF;
+
+  // Bearing
+  buf[16] = (data.courseOverGround >> 8) & 0xFF;
+  buf[17] = data.courseOverGround & 0xFF;
+
+  // HDOP
+  buf[18] = data.hdop;
+
+  // VDOP
+  buf[19] = data.vdop;
+
+  cbGpsMainChar->setValue(buf, sizeof(buf));
+  cbGpsMainChar->notify();
+  ++ble_notify_count;
+
+  uint8_t time_buf[3] = {};
+  time_buf[0] = ((data.gpsSyncBits & 0x7) << 5) | ((data.dateAndHour >> 16) & 0x1F);
+  time_buf[1] = (data.dateAndHour >> 8) & 0xFF;
+  time_buf[2] = data.dateAndHour & 0xFF;
+  cbGpsTimeChar->setValue(time_buf, sizeof(time_buf));
+  // No notification needed. RC will read value when required.
+}
+
 void canBusSetup() {
   // CAN1 setup.
   Serial.println("Initializing builtin CAN peripheral");
   twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT((gpio_num_t)CAN1_TX, (gpio_num_t)CAN1_RX, TWAI_MODE_LISTEN_ONLY /*TWAI_MODE_NORMAL*/);
+  g_config.rx_queue_len = 16;
   twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
-  twai_filter_config_t f_config = {
-    .acceptance_code = ((0x0100 << 3) << 16) | (0x0400 << 3),
-    .acceptance_mask = 0xF7FFDFFF,
-    .single_filter = false,
-  };
+  twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
+  // TODO: this filter misses icl3 messages.
+  // twai_filter_config_t f_config = {
+  //   .acceptance_code = ((0x0100 << 3) << 16) | (0x0400 << 3),
+  //   .acceptance_mask = 0xF7FFDFFF,
+  //   .single_filter = false,
+  // };
 
   if (twai_driver_install(&g_config, &t_config, &f_config) == ESP_OK) {
     Serial.println("CAN1 Driver initialized");
@@ -227,13 +301,14 @@ void canBusSetup() {
   }
 
   // Disable CAN alerts, as we don't act on them anyway.
-  // uint32_t alerts_to_enable = TWAI_ALERT_TX_IDLE | TWAI_ALERT_TX_SUCCESS | TWAI_ALERT_TX_FAILED | TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR;
-  // if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
-  //   Serial.println("CAN1 Alerts reconfigured");
-  // } else {
-  //   Serial.println("Failed to reconfigure alerts");
-  //   return;
-  // }
+  // TODO: enable alerts and check for overflows
+  uint32_t alerts_to_enable = TWAI_ALERT_TX_IDLE | TWAI_ALERT_TX_SUCCESS | TWAI_ALERT_TX_FAILED | TWAI_ALERT_RX_QUEUE_FULL | TWAI_ALERT_RX_DATA | TWAI_ALERT_ERR_PASS | TWAI_ALERT_BUS_ERROR;
+  if (twai_reconfigure_alerts(alerts_to_enable, NULL) == ESP_OK) {
+    Serial.println("CAN1 Alerts reconfigured");
+  } else {
+    Serial.println("Failed to reconfigure alerts");
+    return;
+  }
 
   isCanBusConnected = true;
 }
@@ -332,10 +407,10 @@ void canBusLoop() {
     return;
   }
   // // check if alert happened
-  // uint32_t alerts_triggered;
-  // twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(CAN_POLLING_RATE_MS));
-  // twai_status_info_t twaistatus;
-  // twai_get_status_info(&twaistatus);
+  uint32_t alerts_triggered;
+  twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(CAN_POLLING_RATE_MS));
+  twai_status_info_t twaistatus;
+  twai_get_status_info(&twaistatus);
 
   // // Handle alerts
   // if (alerts_triggered & TWAI_ALERT_ERR_PASS) {
@@ -351,12 +426,12 @@ void canBusLoop() {
   //   Serial.printf("CAN1: TX error: %d\t", twaistatus.tx_error_counter);
   //   Serial.printf("CAN1: TX failed: %d\n", twaistatus.tx_failed_count);
   // }
-  // if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
-  //   Serial.println("CAN1: Alert: The RX queue is full causing a received frame to be lost.");
-  //   Serial.printf("CAN1: RX buffered: %d\t", twaistatus.msgs_to_rx);
-  //   Serial.printf("CAN1: RX missed: %d\t", twaistatus.rx_missed_count);
-  //   Serial.printf("CAN1: RX overrun %d\n", twaistatus.rx_overrun_count);
-  // }
+  if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
+    Serial.println("CAN1: Alert: The RX queue is full causing a received frame to be lost.");
+    Serial.printf("CAN1: RX buffered: %d\t", twaistatus.msgs_to_rx);
+    Serial.printf("CAN1: RX missed: %d\t", twaistatus.rx_missed_count);
+    Serial.printf("CAN1: RX overrun %d\n", twaistatus.rx_overrun_count);
+  }
   // if (alerts_triggered & TWAI_ALERT_TX_SUCCESS) {
   //   Serial.println("CAN1: Alert: The Transmission was successful.");
   //   Serial.printf("CAN1: TX buffered: %d\n", twaistatus.msgs_to_tx);
@@ -387,10 +462,61 @@ void canBusLoop() {
 
 void taskSendBle(void *) {
   twai_message_t message;
+  GpsData gps_data;
   for (;;) {
-    if (xQueueReceive(xQueue1, &message, pdMS_TO_TICKS(1000))) {
+    // TODO: try zero timeouts on queue reads.
+    if (xQueueReceive(xQueue1, &message, pdMS_TO_TICKS(1))) {
       sendCanMsgBle(message.identifier, message.data, message.data_length_code);
     }
+    if (xQueueReceive(xQueueGps, &gps_data, pdMS_TO_TICKS(1))) {
+      sendGpsMsgBle(gps_data);
+    }
+  }
+}
+
+void taskReadGPS(void *) {
+  const uint8_t set_baud_rate[] = { 0xA0, 0xA1, 0x00, 0x04, 0x05, 0x00, /*baud*/ 0x05, 0x00, /*CS*/ 0x00, 0x0D, 0x0A };
+  const uint8_t set_baud_rate_3[] = { 0xA0, 0xA1, 0x00, 0x04, 0x05, 0x00, /*baud*/ 0x03, 0x00, /*CS*/ 0x06, 0x0D, 0x0A };
+  const uint8_t set_baud_rate_perm[] = { 0xA0, 0xA1, 0x00, 0x04, 0x05, 0x00, /*baud*/ 0x05, 0x01, /*CS*/ 0x01, 0x0D, 0x0A };
+  const uint8_t set_gps_rate_1[] = { 0xA0, 0xA1, 0x00, 0x03, 0x0E, /*gps*/ 0x01, 0x00, /*CS*/ 0x0F, 0x0D, 0x0A };
+  const uint8_t set_gps_rate_4[] = { 0xA0, 0xA1, 0x00, 0x03, 0x0E, /*gps*/ 0x04, 0x00, /*CS*/ 0x0A, 0x0D, 0x0A };
+  const uint8_t set_gps_rate_10[] = { 0xA0, 0xA1, 0x00, 0x03, 0x0E, /*gps*/ 0x0A, 0x00, /*CS*/ 0x04, 0x0D, 0x0A };
+  const uint8_t set_gps_rate_20[] = { 0xA0, 0xA1, 0x00, 0x03, 0x0E, /*gps*/ 0x14, 0x00, /*CS*/ 0x1A, 0x0D, 0x0A };
+
+  Serial1.begin(9600, SERIAL_8N1, 41, 40);  // Initialize serial communication with the GPS module
+  sleep(1);
+  while (!Serial1) {
+    delay(500);
+  }
+  Serial1.write(set_baud_rate_3, sizeof(set_baud_rate_3));
+  sleep(1);
+  Serial1.begin(38400, SERIAL_8N1, 41, 40);
+  sleep(1);
+  // Serial1.write(set_gps_rate_20, sizeof(set_gps_rate_20));
+  Serial1.write(set_gps_rate_10, sizeof(set_gps_rate_10));
+  // Serial1.write(set_gps_rate_4, sizeof(set_gps_rate_4));
+  // Serial1.write(set_gps_rate_1, sizeof(set_gps_rate_1));
+
+  GpsData gps_data;
+  for (;;) {
+    while (Serial1.available()) {                // Check if data is available from the GPS module
+      String s = Serial1.readStringUntil('\n');  // Read a line from the GPS module
+      ++gps_line_read_count;
+      // Update gps data.
+      if (!parseNMEA(s, gps_data)) {
+        ++gps_line_invalid_count;
+      }
+      // GPGGA is the signal to send the data to the BLE device.
+      if (s.startsWith("$GPGGA")) {
+        Serial.println(s);
+        if (xQueueSend(xQueueGps, &gps_data, 0)) {
+          ++gps_queue_enqueue_count;
+        } else {
+          ++gps_queue_full_count;
+        }
+      }
+    }
+    vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 }
 
@@ -413,14 +539,35 @@ esp_err_t queue_setup() {
     ESP_LOGE(TAG, "failed queue setup");
     return ESP_FAIL;
   }
+  xQueueGps = xQueueCreate(8, sizeof(GpsData));
+  if (xQueueGps == 0) {
+    ESP_LOGE(TAG, "failed queue setup");
+    return ESP_FAIL;
+  }
 
   return ESP_OK;
 }
 
 
+// #define TEST
+#ifdef TEST
+#include <unity.h>
 void setup() {
   Serial.begin(115200);
-  esp_log_level_set("*", ESP_LOG_ERROR);
+  while (!Serial) {
+    delay(500);
+  }
+  esp_log_level_set("*", ESP_LOG_INFO);
+  esp_log_level_set(TAG, ESP_LOG_DEBUG);
+
+  UNITY_BEGIN();
+  RUN_TEST(test_convertToDecimalDegrees);
+  UNITY_END();
+}
+#else
+void setup() {
+  Serial.begin(115200);
+  esp_log_level_set("*", ESP_LOG_INFO);
   esp_log_level_set(TAG, ESP_LOG_DEBUG);
   pinMode(LED_BUILTIN, OUTPUT);
   queue_setup();
@@ -428,8 +575,10 @@ void setup() {
   ble_setup();
   canBusSetup();
   xTaskCreatePinnedToCore(taskCanBusLoop, "CAN bus reader", 16384, nullptr, 2, nullptr, 1);
+  xTaskCreatePinnedToCore(taskReadGPS, "GPS reader and sender", 16384, nullptr, 2, nullptr, 1);
   xTaskCreatePinnedToCore(taskPrintStats, "Statistics printer", 16384, nullptr, 1, nullptr, 1);
 }
+#endif
 
 void taskCanBusLoop(void *) {
   for (;;) {
