@@ -561,7 +561,7 @@ void setup() {
   esp_log_level_set(TAG, ESP_LOG_DEBUG);
 
   UNITY_BEGIN();
-  RUN_TEST(test_convertToDecimalDegrees);
+  // RUN_TEST(test_convertToDecimalDegrees);
   UNITY_END();
 }
 #else

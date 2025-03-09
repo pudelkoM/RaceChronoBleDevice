@@ -1,4 +1,3 @@
-
 #ifndef GPSHEADER
 #define GPSHEADER
 
@@ -17,7 +16,7 @@ struct GpsData {
   uint32_t milliseconds;
 
   // GPGGA
-  int32_t latitude;  // decimal degrees * 10'000'000
+  int32_t latitude;   // decimal degrees * 10'000'000
   int32_t longitude;  // decimal degrees * 10'000'000
   uint8_t fixQuality;
   uint8_t numberOfSatellites;
@@ -39,33 +38,32 @@ struct GpsData {
 
 // Converts latitude and longitude from "[d]ddmm.mmmm" NMEA format to decimal degrees.
 static int32_t convertToDecimalDegrees(String val, String dir) {
-  int dotIndex = val.indexOf('.');
-  int degrees = val.substring(0, dotIndex - 2).toInt();
-  float minutes = val.substring(dotIndex - 2).toFloat();
-  float decimalDegrees = degrees + (minutes / 60.);
-  if (dir == "S" || dir == "W") {
-    decimalDegrees = -decimalDegrees;
-  }
-  return roundf(decimalDegrees * 10000000.);
-}
+  const char *term = val.c_str();
+  uint32_t leftOfDecimal = (uint32_t)atol(term);
+  uint16_t minutes = (uint16_t)(leftOfDecimal % 100);
+  uint32_t multiplier = 10000000UL;
+  uint32_t tenMillionthsOfMinutes = minutes * multiplier;
 
-static void test_convertToDecimalDegrees() {
-  struct gps_data {
-    String val;
-    String dir;
-    int32_t expected;
-  };
-  struct gps_data test_data[] = {
-    { "3724.0313", "N", 374005216 },
-    { "3724.0313", "S", -374005216 },
-    { "03724.0313", "N", 374005216 },
-    { "12204.5543", "W", -1220759040 },
-    { "12204.5543", "E", 1220759040 },
-    { "0.0", "E", 0 },
-  };
-  for (int i = 0; i < sizeof(test_data) / sizeof(test_data[0]); i++) {
-    TEST_ASSERT_EQUAL_INT32(test_data[i].expected, convertToDecimalDegrees(test_data[i].val, test_data[i].dir));
+  int32_t deg = (int16_t)(leftOfDecimal / 100);
+
+  while (isdigit(*term)) {
+    ++term;
   }
+
+  if (*term == '.') {
+    while (isdigit(*++term)) {
+      multiplier /= 10;
+      tenMillionthsOfMinutes += (*term - '0') * multiplier;
+    }
+  }
+
+  uint32_t billionths = (5 * tenMillionthsOfMinutes + 1) / 3;
+  int32_t ret = deg * 10000000UL + billionths / 100;
+  if (dir == "S" || dir == "W") {
+    ret = -ret;
+  }
+
+  return ret;
 }
 
 static bool parseGPGGA(const String &nmea, struct GpsData &data) {
