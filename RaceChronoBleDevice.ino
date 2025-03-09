@@ -562,6 +562,11 @@ void setup() {
 
   UNITY_BEGIN();
   RUN_TEST(test_convertToDecimalDegrees);
+
+  benchmark_convertFunction(convertToDecimalDegrees, "convertToDecimalDegrees");
+  benchmark_convertFunction(convertToDecimalDegreesRound, "convertToDecimalDegreesRound");
+  benchmark_convertFunction(convertToDecimalDegreesDouble, "convertToDecimalDegreesDouble");
+  benchmark_convertFunction(convertToDecimalDegreesTinygps, "convertToDecimalDegreesTinygps");
   UNITY_END();
 }
 #else
