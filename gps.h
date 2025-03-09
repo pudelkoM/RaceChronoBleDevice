@@ -2,7 +2,6 @@
 #define GPSHEADER
 
 #include <Arduino.h>
-#include <unity.h>
 #include <cmath>
 
 struct GpsData {
@@ -37,7 +36,7 @@ struct GpsData {
 };
 
 // Converts latitude and longitude from "[d]ddmm.mmmm" NMEA format to decimal degrees.
-static int32_t convertToDecimalDegrees(String val, String dir) {
+static int32_t convertToDecimalDegrees(const String &val, const String &dir) {
   const char *term = val.c_str();
   uint32_t leftOfDecimal = (uint32_t)atol(term);
   uint16_t minutes = (uint16_t)(leftOfDecimal % 100);
