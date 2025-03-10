@@ -11,22 +11,22 @@ static int32_t convertToDecimalDegrees(const String& val, const String& dir) {
   int dotIndex = val.indexOf('.');
   int degrees = val.substring(0, dotIndex - 2).toInt();
   float minutes = val.substring(dotIndex - 2).toFloat();
-  float decimalDegrees = degrees + (minutes / 60.);
+  float decimalDegrees = degrees + (minutes / 60.f);
   if (dir == "S" || dir == "W") {
     decimalDegrees = -decimalDegrees;
   }
-  return decimalDegrees * 10000000.;
+  return decimalDegrees * 10000000.f;
 }
 
 static int32_t convertToDecimalDegreesRound(const String& val, const String& dir) {
   int dotIndex = val.indexOf('.');
   int degrees = val.substring(0, dotIndex - 2).toInt();
   float minutes = val.substring(dotIndex - 2).toFloat();
-  float decimalDegrees = degrees + (minutes / 60.);
+  float decimalDegrees = degrees + (minutes / 60.f);
   if (dir == "S" || dir == "W") {
     decimalDegrees = -decimalDegrees;
   }
-  return roundf(decimalDegrees * 10000000.);
+  return roundf(decimalDegrees * 10000000.f);
 }
 
 static int32_t convertToDecimalDegreesDouble(const String& val, const String& dir) {
@@ -72,39 +72,18 @@ static int32_t convertToDecimalDegreesTinygps(const String& val, const String& d
 int32_t convertToDecimalDegreesErik(const String& val, const String& _dir) {
   const char* s = val.c_str();
 
-  int32_t degs = *s++ - '0';
-  if (degs > 0) {
-    degs *= 10;
-  }
-  degs += *s++ - '0';
+  int32_t degs = (((s[0] - '0') * 1000000000) + ((s[1] - '0') * 100000000) + ((s[2] - '0') * 10000000));
 
-  degs *= 10;
-  degs += *s++ - '0';
-
-  degs *= 10;  // we've multiplied degrees by 10 so far
-  degs += *s++ - '0';
-  degs *= 10;  // 100
-  degs += *s++ - '0';
-
-  if (*s++ != '.') {
+  int32_t minutes = (((s[3] - '0') * 100000000.0f / 60.0f) + ((s[4] - '0') * 10000000.0f / 60.0f) + ((s[6] - '0') * 1000000.0f / 60.0f) + ((s[7] - '0') * 100000.0f / 60.0f) + ((s[8] - '0') * 10000.0f / 60.0f) + ((s[9] - '0') * 1000.0f / 60.0f));
+  if (s[5] != '.') {
     return -1;  // invalid value, use as error flag
   }
 
-  // four more digits of minute precision
-  degs *= 10;  // 1,000
-  degs += *s++ - '0';
-  degs *= 10;  // 10,000
-  degs += *s++ - '0';
-  degs *= 10;  // 100,000
-  degs += *s++ - '0';
 
-  degs *= 10;          // 1,000,000
-  degs += *s++ - '0';  //
-
-  // if (*s++ != ',') {
+  // if (s[10] != ',') {
   //   return -1;
   // }
-  // char dir = *s++;
+  // char dir = s[11];
   char dir = _dir.charAt(0);
 
   // E: 01000101, positive
@@ -116,7 +95,7 @@ int32_t convertToDecimalDegreesErik(const String& val, const String& _dir) {
   int neg = (dir & (1 << 4)) >> 3;  // 0 or 2 for positive or negative
   neg = 1 - neg;                    // 1-0 -> 1 for positive, 1-2 -> -1 for negative
   // this gets rid of a branch which is probably pointless,  but it's nicer than checking for multiple different directions
-  return degs * neg * 10;
+  return (degs + minutes) * neg;
 }
 
 
