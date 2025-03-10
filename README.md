@@ -26,6 +26,8 @@ This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates 
 
 ![img](images/racechrono_fast.png)
 
+![img](https://docs.google.com/drawings/d/e/2PACX-1vSVjuSezY-joZCZgl_R_zPmTQYbc_-TqSy_Q0knpW5s3iARCcFFT7KGAUqVmtVJHk40MIxYjNcEZayh/pub?w=463&h=393)
+
 ## Achieving high BLE notification throughput
 
 To achieve high CAN message throughput, the following things should be considered:
