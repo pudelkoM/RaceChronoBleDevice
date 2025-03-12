@@ -28,18 +28,23 @@ This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates 
 
 ## Achieving high BLE notification throughput
 
-To achieve high CAN message throughput, the following things should be considered:
+To achieve high CAN message throughput, the following things should be considered,
+roughly in order of importance:
 
+- Ensure that there are free BLE transmit buffer available before sending (`esp_ble_get_cur_sendable_packets_num`)
+- Set the connection intervals low on the server side (`esp_ble_gap_update_conn_params`)
+- Request HIGH connection priority on the client side
 - Choose 2M BLE PHY over 1M or CODED PHY
+- Set BLE MTU higher than message size + 4
 - Run freeRTOS CAN and BLE tasks with higher than 0 (IDLE) priority
 - Use a **fast** CAN ARBID filter function
-- Ensure that there are free BLE transmit buffer available before sending (`esp_ble_get_cur_sendable_packets_num`)
 - Set the TX power to a high enough setting, depending on distance to phone
 - Filter out uninteresting CAN ARBIDs in hardware
-- Set BLE MTU higher than message size + 4
-- Request HIGH connection priority on the client side
 
 ## Android connection priority / BLE connection interval
+
+_Note: this section is outdated. There is an API for setting the connection
+interval on the server side._
 
 The BLE stack operates on two connection interval values (min, max), which
 effectively determine the maximum possible update rate for CAN-bus messages

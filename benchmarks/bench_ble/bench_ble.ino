@@ -14,17 +14,26 @@ static const char *TAG = "ble_pipe";
 bool isBleConnected = false;
 uint16_t conn_id = 0;  // Only valid when isBleConnected is true.
 BLECharacteristic *cbMainChar = nullptr;
-BLERemoteCharacteristic *a;
 
-struct foo {
-  uint8_t buf[8];
-};
+#define BUFF_SIZE 12
 
-#define notificationType struct foo
-#define notificationTypeInit \
-  { 0 }
-#define BUFF_SIZE 20
+// Results, 12 bytes payload
+// 7.5ms intervals set by ESP: 1015-1040 notifications/s
+// Request HIGH on phone:      1015-1040
+// Request BALANCED:           150-300
+// Request LOW:                40-130
 
+// Results, 20 bytes payload
+// 7.5ms intervals set by ESP: 960-980 notifications/s
+// Request HIGH on phone:      960-970
+// Request BALANCED:           220-350
+// Request LOW:                50-100
+
+// Results, 496 bytes payload, request 517 MTU on phone
+// 7.5ms intervals set by ESP: 215-250 notifications/s
+// Request HIGH on phone:      210-250
+// Request BALANCED:           155-250
+// Request LOW:                210-300
 
 // stats
 static uint64_t ble_notify_count = 0;
@@ -48,9 +57,14 @@ void stats() {
 }
 
 class MyServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer *pServer) {
+  void onConnect(BLEServer *pServer, esp_ble_gatts_cb_param_t *param) {
     Serial.println("Device connected!");
     ESP_LOGI(TAG, "Device connected!");
+    pServer->updateConnParams(param->connect.remote_bda,
+                              6,     // Min connection interval: 6 * 1.25ms = 7.5ms
+                              6,     // Max connection interval: 6 * 1.25ms = 7.5ms
+                              0,     // Latency
+                              500);  // Timeout: 500 * 10ms = 5000ms
     conn_id = pServer->getConnId();
     isBleConnected = true;
   };
@@ -109,7 +123,6 @@ void taskPrintStats(void *) {
 }
 
 void taskSendBle(void *) {
-  notificationType message = notificationTypeInit;
   for (;;) {
     if (!isBleConnected) {
       vTaskDelay(500);
@@ -118,7 +131,7 @@ void taskSendBle(void *) {
     int free_buff_num = esp_ble_get_cur_sendable_packets_num(conn_id);
     if (free_buff_num == 0) {
       ++ble_no_tx_buf_evt_count;
-      vTaskDelay(10 / portTICK_PERIOD_MS);
+      vTaskDelay(5 / portTICK_PERIOD_MS);
       continue;
     }
     for (; free_buff_num > 0; free_buff_num--) {
