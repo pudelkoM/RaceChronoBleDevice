@@ -388,81 +388,85 @@ static void dumpTwaiMessage(const twai_message_t &message) {
   }
 }
 
-void canBusLoop() {
-  // Manage CAN-Bus connection
-  if (!isCanBusConnected && isBleConnected) {
-    // Connect to CAN-Bus
-    Serial.println("Connecting CAN-Bus...");
-    if (twai_start() == ESP_OK) {
-      isCanBusConnected = true;
-      Serial.println("CAN1 interface started");
-    } else {
-      Serial.println("Failed to start CAN1");
-      delay(3000);
-      return;
+void taskCanBusLoop(void *) {
+  for (;;) {
+    // Manage CAN-Bus connection
+    if (!isCanBusConnected && isBleConnected) {
+      // Connect to CAN-Bus
+      Serial.println("Connecting CAN-Bus...");
+      if (twai_start() == ESP_OK) {
+        isCanBusConnected = true;
+        pinMode(LED_BUILTIN, HIGH);
+        Serial.println("CAN1 interface started");
+      } else {
+        Serial.println("Failed to start CAN1");
+        delay(3000);
+        continue;
+      }
+    } else if (isCanBusConnected && !isBleConnected) {
+      // Disconnect from CAN-Bus
+      twai_stop();
+      isCanBusConnected = false;
+      pinMode(LED_BUILTIN, LOW);
+      Serial.println("Stopped CAN1");
     }
-  } else if (isCanBusConnected && !isBleConnected) {
-    // Disconnect from CAN-Bus
-    twai_stop();
-    isCanBusConnected = false;
-    Serial.println("Stopped CAN1");
-  }
 
-  // Handle CAN-Bus data
-  if (!isCanBusConnected) {  // TODO: use driver status as flag
-    vTaskDelay(pdMS_TO_TICKS(500));
-    return;
-  }
-  // // check if alert happened
-  // uint32_t alerts_triggered;
-  // twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(CAN_POLLING_RATE_MS));
-  // twai_status_info_t twaistatus;
-  // twai_get_status_info(&twaistatus);
-
-  // // Handle alerts
-  // if (alerts_triggered & TWAI_ALERT_ERR_PASS) {
-  //   Serial.println("CAN1: Alert: TWAI controller has become error passive.");
-  // }
-  // if (alerts_triggered & TWAI_ALERT_BUS_ERROR) {
-  //   Serial.println("CAN1: Alert: A (Bit, Stuff, CRC, Form, ACK) error has occurred on the bus.");
-  //   Serial.printf("CAN1: Bus error count: %d\n", twaistatus.bus_error_count);
-  // }
-  // if (alerts_triggered & TWAI_ALERT_TX_FAILED) {
-  //   Serial.println("CAN1: Alert: The Transmission failed.");
-  //   Serial.printf("CAN1: TX buffered: %d\t", twaistatus.msgs_to_tx);
-  //   Serial.printf("CAN1: TX error: %d\t", twaistatus.tx_error_counter);
-  //   Serial.printf("CAN1: TX failed: %d\n", twaistatus.tx_failed_count);
-  // }
-  // if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
-  //   Serial.println("CAN1: Alert: The RX queue is full causing a received frame to be lost.");
-  //   Serial.printf("CAN1: RX buffered: %d\t", twaistatus.msgs_to_rx);
-  //   Serial.printf("CAN1: RX missed: %d\t", twaistatus.rx_missed_count);
-  //   Serial.printf("CAN1: RX overrun %d\n", twaistatus.rx_overrun_count);
-  // }
-  // if (alerts_triggered & TWAI_ALERT_TX_SUCCESS) {
-  //   Serial.println("CAN1: Alert: The Transmission was successful.");
-  //   Serial.printf("CAN1: TX buffered: %d\n", twaistatus.msgs_to_tx);
-  // }
-  // // Check if message is received
-  // if (alerts_triggered & TWAI_ALERT_RX_DATA) {
-  //   // read here
-  // }
-
-  twai_message_t message;
-  while (twai_receive(&message, pdMS_TO_TICKS(CAN_POLLING_RATE_MS)) == ESP_OK) {
-    ++can_rx_count;
-    if (message.rtr) {
-      ++can_not_interested_count;
+    // Handle CAN-Bus data
+    if (!isCanBusConnected) {  // TODO: use driver status as flag
+      vTaskDelay(pdMS_TO_TICKS(500));
       continue;
     }
-    if (!canPidAllowed(message.identifier)) {
-      ++can_not_interested_count;
-      continue;
-    }
-    if (xQueueSend(xQueue1, &message, 0)) {
-      ++can_queue_enqueue_count;
-    } else {
-      ++can_queue_full_count;
+    // // check if alert happened
+    // uint32_t alerts_triggered;
+    // twai_read_alerts(&alerts_triggered, pdMS_TO_TICKS(CAN_POLLING_RATE_MS));
+    // twai_status_info_t twaistatus;
+    // twai_get_status_info(&twaistatus);
+
+    // // Handle alerts
+    // if (alerts_triggered & TWAI_ALERT_ERR_PASS) {
+    //   Serial.println("CAN1: Alert: TWAI controller has become error passive.");
+    // }
+    // if (alerts_triggered & TWAI_ALERT_BUS_ERROR) {
+    //   Serial.println("CAN1: Alert: A (Bit, Stuff, CRC, Form, ACK) error has occurred on the bus.");
+    //   Serial.printf("CAN1: Bus error count: %d\n", twaistatus.bus_error_count);
+    // }
+    // if (alerts_triggered & TWAI_ALERT_TX_FAILED) {
+    //   Serial.println("CAN1: Alert: The Transmission failed.");
+    //   Serial.printf("CAN1: TX buffered: %d\t", twaistatus.msgs_to_tx);
+    //   Serial.printf("CAN1: TX error: %d\t", twaistatus.tx_error_counter);
+    //   Serial.printf("CAN1: TX failed: %d\n", twaistatus.tx_failed_count);
+    // }
+    // if (alerts_triggered & TWAI_ALERT_RX_QUEUE_FULL) {
+    //   Serial.println("CAN1: Alert: The RX queue is full causing a received frame to be lost.");
+    //   Serial.printf("CAN1: RX buffered: %d\t", twaistatus.msgs_to_rx);
+    //   Serial.printf("CAN1: RX missed: %d\t", twaistatus.rx_missed_count);
+    //   Serial.printf("CAN1: RX overrun %d\n", twaistatus.rx_overrun_count);
+    // }
+    // if (alerts_triggered & TWAI_ALERT_TX_SUCCESS) {
+    //   Serial.println("CAN1: Alert: The Transmission was successful.");
+    //   Serial.printf("CAN1: TX buffered: %d\n", twaistatus.msgs_to_tx);
+    // }
+    // // Check if message is received
+    // if (alerts_triggered & TWAI_ALERT_RX_DATA) {
+    //   // read here
+    // }
+
+    twai_message_t message;
+    while (twai_receive(&message, pdMS_TO_TICKS(CAN_POLLING_RATE_MS)) == ESP_OK) {
+      ++can_rx_count;
+      if (message.rtr) {
+        ++can_not_interested_count;
+        continue;
+      }
+      if (!canPidAllowed(message.identifier)) {
+        ++can_not_interested_count;
+        continue;
+      }
+      if (xQueueSend(xQueueCan, &message, 0)) {
+        ++can_queue_enqueue_count;
+      } else {
+        ++can_queue_full_count;
+      }
     }
   }
 }
@@ -577,6 +581,7 @@ void setup() {
   esp_log_level_set("*", ESP_LOG_INFO);
   esp_log_level_set(TAG, ESP_LOG_DEBUG);
   pinMode(LED_BUILTIN, OUTPUT);
+  pinMode(LED_BUILTIN, LOW);
   queue_setup();
   xTaskCreatePinnedToCore(taskSendBle, "BLE messages sender", 16384, nullptr, 2, nullptr, 0);  // Core 0 has less other stuff running on it.
   ble_setup();
@@ -586,14 +591,6 @@ void setup() {
   xTaskCreatePinnedToCore(taskPrintStats, "Statistics printer", 16384, nullptr, 1, nullptr, 1);
 }
 #endif
-
-void taskCanBusLoop(void *) {
-  for (;;) {
-    digitalWrite(LED_BUILTIN, HIGH);
-    canBusLoop();
-    digitalWrite(LED_BUILTIN, LOW);
-  }
-}
 
 void loop() {
   delay(1000000);
