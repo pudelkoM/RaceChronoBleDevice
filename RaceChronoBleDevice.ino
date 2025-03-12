@@ -23,7 +23,7 @@ uint16_t conn_id = 0;  // Only valid when isBleConnected is true.
 BLECharacteristic *cbMainChar = nullptr;
 BLECharacteristic *cbGpsMainChar = nullptr;
 BLECharacteristic *cbGpsTimeChar = nullptr;
-QueueHandle_t xQueue1;
+QueueHandle_t xQueueCan;
 QueueHandle_t xQueueGps;
 
 
@@ -541,8 +541,8 @@ void taskPrintStats(void *) {
 }
 
 esp_err_t queue_setup() {
-  xQueue1 = xQueueCreate(8, sizeof(twai_message_t));
-  if (xQueue1 == 0) {
+  xQueueCan = xQueueCreate(8, sizeof(twai_message_t));
+  if (xQueueCan == 0) {
     ESP_LOGE(TAG, "failed queue setup");
     return ESP_FAIL;
   }
