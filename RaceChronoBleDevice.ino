@@ -127,11 +127,12 @@ class MyCanbusFilterCallbacks : public BLECharacteristicCallbacks {
 };
 
 class MyServerCallbacks : public BLEServerCallbacks {
-  void onConnect(BLEServer *pServer) {
+  void onConnect(BLEServer *pServer, esp_ble_gatts_cb_param_t *param) {
     Serial.println("Device connected!");
     ESP_LOGI(TAG, "Device connected!");
     conn_id = pServer->getConnId();
     isBleConnected = true;
+    pServer->updateConnParams(param->connect.remote_bda, 6, 6, 0, 500);
   };
 
   void onDisconnect(BLEServer *pServer) {
