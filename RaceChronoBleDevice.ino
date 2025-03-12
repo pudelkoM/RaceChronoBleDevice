@@ -130,9 +130,14 @@ class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *pServer, esp_ble_gatts_cb_param_t *param) {
     Serial.println("Device connected!");
     ESP_LOGI(TAG, "Device connected!");
+    pServer->updateConnParams(param->connect.remote_bda,
+                              6,     // Min connection interval: 6 * 1.25ms = 7.5ms
+                              6,     // Max connection interval: 6 * 1.25ms = 7.5ms
+                              0,     // Latency
+                              500);  // Timeout: 500 * 10ms = 5000ms
+
     conn_id = pServer->getConnId();
     isBleConnected = true;
-    pServer->updateConnParams(param->connect.remote_bda, 6, 6, 0, 500);
   };
 
   void onDisconnect(BLEServer *pServer) {
