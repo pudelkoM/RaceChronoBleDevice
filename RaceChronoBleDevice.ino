@@ -476,7 +476,7 @@ void taskSendBle(void *) {
   GpsData gps_data;
   for (;;) {
     // TODO: try zero timeouts on queue reads.
-    if (xQueueReceive(xQueue1, &message, pdMS_TO_TICKS(1))) {
+    if (xQueueReceive(xQueueCan, &message, pdMS_TO_TICKS(1))) {
       sendCanMsgBle(message.identifier, message.data, message.data_length_code);
     }
     if (xQueueReceive(xQueueGps, &gps_data, pdMS_TO_TICKS(1))) {
