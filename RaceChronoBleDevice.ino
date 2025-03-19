@@ -3,6 +3,7 @@
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEServer.h>
+#include "TinyGPS.h"
 #include "e85.h"
 #include "gps.h"
 // #define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
@@ -25,7 +26,24 @@ BLECharacteristic *cbGpsMainChar = nullptr;
 BLECharacteristic *cbGpsTimeChar = nullptr;
 QueueHandle_t xQueueCan;
 QueueHandle_t xQueueGps;
+TinyGPSPlus gps;
+TinyGPSCustom hdop(gps, "GPGSA", 6);
+TinyGPSCustom vdop(gps, "GPGSA", 7);
 
+struct TinyGPSVdop : private TinyGPSDecimal, TinyGPSCustom {
+  using TinyGPSDecimal::value;
+  using TinyGPSDecimal::isUpdated;
+  using TinyGPSDecimal::isValid;
+
+  TinyGPSVdop(TinyGPSPlus &gps, const char *sentenceName, int termNumber) {
+    TinyGPSCustom(gps, sentenceName, termNumber);
+  }
+  double vdop() {
+    return TinyGPSDecimal::value() / 100.0;
+  }
+};
+
+TinyGPSVdop vdop1(gps, "GPGSA", 7);
 
 // Stats and counters
 static uint64_t ble_notify_count = 0;
@@ -510,21 +528,62 @@ void taskReadGPS(void *) {
 
   GpsData gps_data;
   for (;;) {
-    while (Serial1.available()) {                // Check if data is available from the GPS module
-      String s = Serial1.readStringUntil('\n');  // Read a line from the GPS module
-      ++gps_line_read_count;
-      // Update gps data.
-      if (!parseNMEA(s, gps_data)) {
-        ++gps_line_invalid_count;
+    while (Serial1.available()) {  // Check if data is available from the GPS module
+      int c = Serial1.read();
+      if (c == -1) {
+        break;
       }
-      // GPGGA is the signal to send the data to the BLE device.
-      if (s.startsWith("$GPGGA")) {
-        Serial.println(s);
+      if (!gps.encode(c)) {
+        continue;
+      }
+
+      if (gps.time.isUpdated()) {
+        gps_data.hours = gps.time.hour();
+        gps_data.minutes = gps.time.minute();
+        gps_data.seconds = gps.time.second();
+        gps_data.milliseconds = gps.time.centisecond() * 10;
+        gps_data.gpsSyncBits = gps.time.hour() & 0x7;
+      }
+
+      if (gps.date.isUpdated()) {
+        gps_data.dateAndHour = (gps.date.year() * 8928) + ((gps.date.month() - 1) * 744) + ((gps.date.day() - 1) * 24) + gps_data.hours;
+      }
+
+      if (gps.satellites.isUpdated()) {
+        gps_data.numberOfSatellites = gps.satellites.value();
+      }
+
+      if (gps.altitude.isUpdated()) {
+        gps_data.altitude = uint16_t((gps.altitude.meters() + 500) * 10.) & 0x7FFF;
+      }
+
+      if (gps.speed.isUpdated()) {
+        gps_data.speedOverGround = uint16_t(gps.speed.kmph() * 100.) & 0x7FFF;
+      }
+
+      if (gps.course.isUpdated()) {
+        gps_data.courseOverGround = gps.course.value();
+      }
+
+      if (gps.hdop.isUpdated()) {
+        gps_data.hdop = gps.hdop.value() / 10.;
+      }
+
+      if (vdop1.isUpdated()) {
+        gps_data.vdop = vdop1.vdop() / 10.;
+      }
+
+      if (gps.location.isUpdated()) {
+        gps_data.latitude = gps.location.lat() * 10000000.;
+        gps_data.longitude = gps.location.lng() * 10000000.;
+        gps_data.fixQuality = gps.location.FixQuality();
         if (xQueueSend(xQueueGps, &gps_data, 0)) {
           ++gps_queue_enqueue_count;
         } else {
           ++gps_queue_full_count;
         }
+        gps_line_read_count = gps.sentencesWithFix();
+        gps_line_invalid_count = gps.failedChecksum();
       }
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);

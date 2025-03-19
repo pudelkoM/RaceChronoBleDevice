@@ -33,6 +33,10 @@ struct GpsData {
   // GPGSA
   uint8_t hdop;  // hdop * 10
   uint8_t vdop;  // vdop * 10
+
+  GpsData()
+    : latitude(0x7FFFFFFF), longitude(0x7FFFFFFF), fixQuality(0x3F), numberOfSatellites(0x3F),
+      altitude(0xFFFF), speedOverGround(0xFFFF), courseOverGround(0xFFFF), hdop(0xFF), vdop(0xFF) {}
 };
 
 // Converts latitude and longitude from "[d]ddmm.mmmm" NMEA format to decimal degrees.
