@@ -489,16 +489,50 @@ void taskCanBusLoop(void *) {
   }
 }
 
+// CanData can_data;
+// void taskSendBleCan(void *) {
+//   TickType_t xLastWakeTime;
+//   const TickType_t xFrequency = pdMS_TO_TICKS(20);
+//   xLastWakeTime = xTaskGetTickCount();
+//   for (;;) {
+//     BaseType_t xWasDelayed = xTaskDelayUntil(&xLastWakeTime, xFrequency);
+//     if (xWasDelayed == pdFALSE) {
+//       ESP_LOGW(TAG, "stats task was not delayed, i.e. running too long!");
+//     }
+//     uint8_t buf[16] = {};
+//     packCanMessage(can_data, buf);
+//     sendCanMsgBle(0x900, buf, std::size(buf));
+//   }
+// }
+
 void taskSendBle(void *) {
   twai_message_t message;
+  CanData can_data;
   GpsData gps_data;
+
+  int64_t last = esp_timer_get_time();  // us
   for (;;) {
+    // int64_t now = esp_timer_get_time();
+    // if (last + 10 * 1000 < now) {
+    //   uint8_t buf[16] = {};
+    //   packCanMessage(can_data, buf);
+    //   sendCanMsgBle(0x900, buf, std::size(buf));
+    //   last = now;
+    // }
     // TODO: try zero timeouts on queue reads.
     if (xQueueReceive(xQueueCan, &message, pdMS_TO_TICKS(1))) {
-      sendCanMsgBle(message.identifier, message.data, message.data_length_code);
+      if (handleCanMessage(message, can_data)) {
+        uint8_t buf[16] = {};
+        packCanMessage(can_data, buf);
+        sendCanMsgBle(0x900, buf, std::size(buf));
+      }
+      // sendCanMsgBle(message.identifier, message.data, message.data_length_code);
     }
     if (xQueueReceive(xQueueGps, &gps_data, pdMS_TO_TICKS(1))) {
       sendGpsMsgBle(gps_data);
+      // uint8_t buf[16] = {};
+      // packCanMessage(can_data, buf);
+      // sendCanMsgBle(0x900, buf, std::size(buf));
     }
   }
 }
@@ -642,7 +676,8 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(LED_BUILTIN, LOW);
   queue_setup();
-  xTaskCreatePinnedToCore(taskSendBle, "BLE messages sender", 16384, nullptr, 2, nullptr, 0);  // Core 0 has less other stuff running on it.
+  xTaskCreatePinnedToCore(taskSendBle, "BLE messages sender", 16384, nullptr, 2, nullptr, 0);     // Core 0 has less other stuff running on it.
+  // xTaskCreatePinnedToCore(taskSendBleCan, "BLE messages sender", 16384, nullptr, 3, nullptr, 0);  // Core 0 has less other stuff running on it.
   ble_setup();
   canBusSetup();
   xTaskCreatePinnedToCore(taskCanBusLoop, "CAN bus reader", 16384, nullptr, 2, nullptr, 1);

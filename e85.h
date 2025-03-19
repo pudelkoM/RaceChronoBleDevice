@@ -18,17 +18,95 @@ static constexpr uint32_t can_dme4_id = 0x545;
 static constexpr uint32_t can_icl3_id = 0x615;
 
 // Desired update frequencies for a given message. In Hz (1/s).
-static constexpr uint32_t can_asc1_freq = 20; // 10ms(ASC)/20ms(DSC) native
-static constexpr uint32_t can_asc2_freq = 20; // 10ms(ASC)/20ms(DSC) native
-static constexpr uint32_t can_asc3_freq = 10; // 20ms native
-static constexpr uint32_t can_asc4_freq = 20; // 20ms native
-static constexpr uint32_t can_lws1_freq = 10; // 10ms native
-static constexpr uint32_t can_dme1_freq = 20; // 10ms native
-static constexpr uint32_t can_dme2_freq = 10; // 10ms native
-static constexpr uint32_t can_dme3_freq = 1;  // 1000ms native
-static constexpr uint32_t can_dme4_freq = 1;  // 10ms native
-static constexpr uint32_t can_icl3_freq = 1;  // 200ms native
+static constexpr uint32_t can_asc1_freq = 20;  // 10ms(ASC)/20ms(DSC) native
+static constexpr uint32_t can_asc2_freq = 20;  // 10ms(ASC)/20ms(DSC) native
+static constexpr uint32_t can_asc3_freq = 10;  // 20ms native
+static constexpr uint32_t can_asc4_freq = 20;  // 20ms native
+static constexpr uint32_t can_lws1_freq = 10;  // 10ms native
+static constexpr uint32_t can_dme1_freq = 20;  // 10ms native
+static constexpr uint32_t can_dme2_freq = 10;  // 10ms native
+static constexpr uint32_t can_dme3_freq = 1;   // 1000ms native
+static constexpr uint32_t can_dme4_freq = 1;   // 10ms native
+static constexpr uint32_t can_icl3_freq = 1;   // 200ms native
 static constexpr uint32_t can_default_freq = 1;
+
+
+struct CanData {
+  uint8_t accel_pos;  // DME2
+  uint8_t air_temp;
+  uint8_t air_pressure;
+  bool brake_switch;
+  uint8_t brake_pressure;
+  bool clutch_switch;
+  uint8_t coolant_temp;
+  uint16_t engine_rpm;
+  uint8_t oil_temp;
+  uint16_t speed;
+  uint16_t steering_angle;
+};
+
+static void packCanMessage(const struct CanData& data, uint8_t* buf) {
+  buf[0] = (data.speed >> 8) & 0xFF;
+  buf[1] = data.speed & 0xFF;
+  buf[2] = data.brake_pressure;
+  buf[3] = (data.steering_angle >> 8) & 0xFF;
+  buf[4] = data.steering_angle & 0xFF;
+  buf[5] = (data.engine_rpm >> 8) & 0xFF;
+  buf[6] = data.engine_rpm & 0xFF;
+  buf[7] = data.clutch_switch;
+  buf[8] = data.coolant_temp;
+  buf[9] = data.air_pressure;
+  buf[10] = data.accel_pos;
+  buf[11] = data.oil_temp;
+  buf[12] = data.air_temp;
+}
+
+static bool handleCanMessage(const twai_message_t& message, struct CanData& data) {
+  switch (message.identifier) {
+    case can_asc1_id:
+      data.speed = (message.data[1] << 8) | message.data[2];
+      break;
+    case can_asc2_id:
+      // 4 wheel speed sensors
+      break;
+    case can_asc3_id:
+      // X and Y acceleration
+      break;
+    case can_asc4_id:
+      data.brake_pressure = message.data[2];
+      break;
+    case can_lws1_id:
+      data.steering_angle = (message.data[0] << 8) | message.data[1];
+      break;
+    case can_dme1_id:
+      data.engine_rpm = (message.data[2] << 8) | message.data[3];
+      break;
+    case can_dme2_id:
+      data.coolant_temp = message.data[1];
+      data.air_pressure = message.data[2];
+      data.clutch_switch = message.data[3] & 0x1;
+      data.accel_pos = message.data[5];
+      data.brake_switch = message.data[6] & 0x1;
+      break;
+    case can_dme3_id:
+      // Sport button
+      break;
+    case can_dme4_id:
+      data.oil_temp = message.data[4];
+      break;
+    case can_icl3_id:
+      data.air_temp = message.data[3];
+      break;
+    default:
+      break;
+  }
+
+  if (message.identifier == can_lws1_id) {
+    return true;
+  } else {
+    return false;
+  }
+}
 
 static uint16_t get_notify_interval_ms(uint32_t pid) {
   switch (pid) {
@@ -44,6 +122,24 @@ static uint16_t get_notify_interval_ms(uint32_t pid) {
     case can_icl3_id: return 1000 / can_icl3_freq;
     default: return 1000 / can_default_freq;
   }
+}
+
+static bool canPidAllowed2(uint32_t pid) {
+  switch (pid) {
+    case can_asc1_id:
+    case can_asc2_id:
+    case can_asc3_id:
+    case can_asc4_id:
+    case can_lws1_id:
+    case can_dme1_id:
+    case can_dme2_id:
+    case can_dme3_id:
+    case can_dme4_id:
+    case can_icl3_id:
+      return true;
+  }
+
+  return false;
 }
 
 static bool canPidAllowed(uint32_t pid) {
