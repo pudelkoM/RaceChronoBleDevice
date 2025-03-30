@@ -17,6 +17,10 @@ static const char *TAG = "racechrono_canbus_ble";
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
 
+// debug
+bool pauseGps = false;
+// end
+
 bool canBusAllowUnknownPackets = false;
 bool isCanBusConnected = false;
 bool isBleConnected = false;
@@ -26,24 +30,41 @@ BLECharacteristic *cbGpsMainChar = nullptr;
 BLECharacteristic *cbGpsTimeChar = nullptr;
 QueueHandle_t xQueueCan;
 QueueHandle_t xQueueGps;
+QueueHandle_t xQueueCombined;
 TinyGPSPlus gps;
-TinyGPSCustom hdop(gps, "GPGSA", 6);
-TinyGPSCustom vdop(gps, "GPGSA", 7);
+TinyGPSCustom hdop(gps, "GPGSA", 16);
+TinyGPSCustom vdop(gps, "GPGSA", 17);
 
-struct TinyGPSVdop : private TinyGPSDecimal, TinyGPSCustom {
-  using TinyGPSDecimal::value;
-  using TinyGPSDecimal::isUpdated;
-  using TinyGPSDecimal::isValid;
-
-  TinyGPSVdop(TinyGPSPlus &gps, const char *sentenceName, int termNumber) {
-    TinyGPSCustom(gps, sentenceName, termNumber);
-  }
-  double vdop() {
-    return TinyGPSDecimal::value() / 100.0;
-  }
+struct xQueueItem {
+  enum { invalid = 0,
+         twai = 1,
+         gps = 2 } type;
+  union U {
+    twai_message_t twai_message;
+    GpsData gps_data;
+    U();
+  } data;
 };
 
-TinyGPSVdop vdop1(gps, "GPGSA", 7);
+xQueueItem::U::U()
+  : gps_data() {
+}
+
+// struct TinyGPSVdop : private TinyGPSDecimal, TinyGPSCustom {
+//   using TinyGPSDecimal::value;
+//   using TinyGPSDecimal::isUpdated;
+//   using TinyGPSDecimal::isValid;
+
+//   TinyGPSVdop(TinyGPSPlus &gps, const char *sentenceName, int termNumber) {
+//     TinyGPSCustom(gps, sentenceName, termNumber);
+//     TinyGPSDecimal(gps, sentenceName, termNumber);
+//   }
+//   double vdop() {
+//     return TinyGPSDecimal::value() / 100.0;
+//   }
+// };
+
+// TinyGPSVdop vdop1(gps, "GPGSA", 7);
 
 // Stats and counters
 static uint64_t ble_notify_count = 0;
@@ -96,6 +117,17 @@ void stats() {
   Serial.printf("gps_line_invalid_count/s %llu, ", diff_gps_line_invalid_count);
   Serial.println("");
 }
+
+class MyGpsCallbacks : public BLECharacteristicCallbacks {
+  void onRead(BLECharacteristic *pCharacteristic, esp_ble_gatts_cb_param_t *param) {
+    ESP_LOGI(TAG, "char on read: %s, data len %i", pCharacteristic->toString().c_str(), pCharacteristic->getLength());
+    ESP_LOG_BUFFER_HEXDUMP(TAG, pCharacteristic->getData(), pCharacteristic->getLength(), ESP_LOG_INFO);
+    // param->write
+    // param->read()
+    // pCharacteristic->getValue();
+    // param->set_attr_val
+  }
+};
 
 class MyCanbusFilterCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pCharacteristic) {
@@ -189,10 +221,12 @@ void ble_setup() {
   BLECharacteristic *pGpsMainCharacteristic = pService->createCharacteristic(
     BLEUUID(uint16_t(0x0003)), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   cbGpsMainChar = pGpsMainCharacteristic;
+  // pGpsMainCharacteristic->setCallbacks(new MyGpsCallbacks());
 
   BLECharacteristic *pGpsTimeCharacteristic = pService->createCharacteristic(
     BLEUUID(uint16_t(0x0004)), BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
   cbGpsTimeChar = pGpsTimeCharacteristic;
+  // pGpsTimeCharacteristic->setCallbacks(new MyGpsCallbacks());
 
   pService->start();
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
@@ -232,6 +266,9 @@ void sendCanMsgBle(uint32_t id, uint8_t *data, uint8_t len) {
 }
 
 void sendGpsMsgBle(struct GpsData &data) {
+  if (pauseGps) {
+    return;
+  }
   if (!isBleConnected) {
     return;
   }
@@ -246,6 +283,11 @@ void sendGpsMsgBle(struct GpsData &data) {
   uint8_t buf[20] = {};
 
   // Sync bits and time from hour start
+  Serial.flush();
+  ESP_LOGI(TAG, "sending: time %02i:%02i:%02i, sync %i, date %i, longitude %i, latitude %i, fixq %i, sats %i\n",
+           data.hours, data.minutes, data.seconds, data.gpsSyncBits, data.dateAndHour,
+           data.longitude, data.latitude, data.fixQuality, data.numberOfSatellites);
+  Serial.flush();
   uint32_t timeFromHourStart = (data.minutes * 30000) + (data.seconds * 500) + (data.milliseconds / 2);
   buf[0] = ((data.gpsSyncBits & 0x7) << 5) | ((timeFromHourStart >> 16) & 0x1F);
   buf[1] = (timeFromHourStart >> 8) & 0xFF;
@@ -287,6 +329,7 @@ void sendGpsMsgBle(struct GpsData &data) {
   cbGpsMainChar->setValue(buf, sizeof(buf));
   cbGpsMainChar->notify();
   ++ble_notify_count;
+  hexDump(buf, sizeof(buf));
 
   uint8_t time_buf[3] = {};
   time_buf[0] = ((data.gpsSyncBits & 0x7) << 5) | ((data.dateAndHour >> 16) & 0x1F);
@@ -294,6 +337,8 @@ void sendGpsMsgBle(struct GpsData &data) {
   time_buf[2] = data.dateAndHour & 0xFF;
   cbGpsTimeChar->setValue(time_buf, sizeof(time_buf));
   // No notification needed. RC will read value when required.
+  cbGpsTimeChar->notify();
+  hexDump(time_buf, sizeof(time_buf));
 }
 
 void canBusSetup() {
@@ -469,18 +514,21 @@ void taskCanBusLoop(void *) {
     //   // read here
     // }
 
-    twai_message_t message;
-    while (twai_receive(&message, pdMS_TO_TICKS(CAN_POLLING_RATE_MS)) == ESP_OK) {
+    xQueueItem combined = {};
+    combined.type = xQueueItem::twai;
+    // twai_message_t message;
+    while (twai_receive(&combined.data.twai_message, pdMS_TO_TICKS(CAN_POLLING_RATE_MS)) == ESP_OK) {
       ++can_rx_count;
-      if (message.rtr) {
+      if (combined.data.twai_message.rtr) {
         ++can_not_interested_count;
         continue;
       }
-      if (!canPidAllowed(message.identifier)) {
+      if (!canPidAllowed(combined.data.twai_message.identifier)) {
         ++can_not_interested_count;
         continue;
       }
-      if (xQueueSend(xQueueCan, &message, 0)) {
+      // if (xQueueSend(xQueueCan, &message, 0)) {
+      if (xQueueSend(xQueueCombined, &combined, 0)) {
         ++can_queue_enqueue_count;
       } else {
         ++can_queue_full_count;
@@ -490,20 +538,38 @@ void taskCanBusLoop(void *) {
 }
 
 void taskSendBle(void *) {
-  twai_message_t message;
-  GpsData gps_data;
+  // twai_message_t message;
+  // GpsData gps_data;
+  xQueueItem combined;
   for (;;) {
-    // TODO: try zero timeouts on queue reads.
-    if (xQueueReceive(xQueueCan, &message, pdMS_TO_TICKS(1))) {
-      sendCanMsgBle(message.identifier, message.data, message.data_length_code);
+    if (xQueueReceive(xQueueCombined, &combined, pdMS_TO_TICKS(1000))) {
+      switch (combined.type) {
+        case xQueueItem::twai:
+          sendCanMsgBle(combined.data.twai_message.identifier, combined.data.twai_message.data, combined.data.twai_message.data_length_code);
+          break;
+        case xQueueItem::gps:
+          sendGpsMsgBle(combined.data.gps_data);
+          break;
+      }
     }
-    if (xQueueReceive(xQueueGps, &gps_data, pdMS_TO_TICKS(1))) {
-      sendGpsMsgBle(gps_data);
-    }
+
+    // if (uxQueueMessagesWaiting(xQueueCan) + uxQueueMessagesWaiting(xQueueGps) == 0) {
+    //   vTaskDelay(pdMS_TO_TICKS(1));
+    //   continue;
+    // }
+
+    // // TODO: try zero timeouts on queue reads.
+    // if (xQueueReceive(xQueueCan, &message, pdMS_TO_TICKS(0))) {
+    //   sendCanMsgBle(message.identifier, message.data, message.data_length_code);
+    // }
+    // if (xQueueReceive(xQueueGps, &gps_data, pdMS_TO_TICKS(0))) {
+    //   sendGpsMsgBle(gps_data);
+    // }
   }
 }
 
 void taskReadGPS(void *) {
+  const uint8_t set_power_save_off[] = { 0xA0, 0xA1, 0x00, 0x03, 0x0C, /*mode*/ 0x00, 0x00, /*CS*/ 0x0C, 0x0D, 0x0A };
   const uint8_t set_baud_rate[] = { 0xA0, 0xA1, 0x00, 0x04, 0x05, 0x00, /*baud*/ 0x05, 0x00, /*CS*/ 0x00, 0x0D, 0x0A };
   const uint8_t set_baud_rate_3[] = { 0xA0, 0xA1, 0x00, 0x04, 0x05, 0x00, /*baud*/ 0x03, 0x00, /*CS*/ 0x06, 0x0D, 0x0A };
   const uint8_t set_baud_rate_perm[] = { 0xA0, 0xA1, 0x00, 0x04, 0x05, 0x00, /*baud*/ 0x05, 0x01, /*CS*/ 0x01, 0x0D, 0x0A };
@@ -513,40 +579,114 @@ void taskReadGPS(void *) {
   const uint8_t set_gps_rate_20[] = { 0xA0, 0xA1, 0x00, 0x03, 0x0E, /*gps*/ 0x14, 0x00, /*CS*/ 0x1A, 0x0D, 0x0A };
 
   Serial1.begin(9600, SERIAL_8N1, 41, 40);  // Initialize serial communication with the GPS module
-  sleep(1);
+  delay(1000);
   while (!Serial1) {
     delay(500);
   }
+  Serial1.write(set_power_save_off, sizeof(set_power_save_off));
+  delay(500);
   Serial1.write(set_baud_rate_3, sizeof(set_baud_rate_3));
-  sleep(1);
+  delay(1000);
   Serial1.begin(38400, SERIAL_8N1, 41, 40);
-  sleep(1);
+  delay(1000);
   // Serial1.write(set_gps_rate_20, sizeof(set_gps_rate_20));
-  Serial1.write(set_gps_rate_10, sizeof(set_gps_rate_10));
-  // Serial1.write(set_gps_rate_4, sizeof(set_gps_rate_4));
+  // Serial1.write(set_gps_rate_10, sizeof(set_gps_rate_10));
+  Serial1.write(set_gps_rate_4, sizeof(set_gps_rate_4));
   // Serial1.write(set_gps_rate_1, sizeof(set_gps_rate_1));
+  delay(1000);
 
-  GpsData gps_data;
+  // GpsData gps_data;
+  xQueueItem combined;
+  combined.type = xQueueItem::gps;
+  GpsData &gps_data = combined.data.gps_data;
+
+  uint32_t count = 0;
+  String s;
   for (;;) {
+    if (!isBleConnected) {
+      // gps_data = GpsData();
+      // xQueueSend(xQueueCombined, &combined, 0);
+      vTaskDelay(500);
+      continue;
+    }
+
+    while (Serial.available()) {
+      int c = Serial.read();
+      if (c == -1) {
+        break;
+      }
+      if (c == 'p') {
+        pauseGps = true;
+        Serial.println("pausing GPS messages");
+      }
+      if (c == 'c') {
+        pauseGps = false;
+        Serial.println("continuing GPS messages");
+      }
+      if (c == 'i') {
+        ++gps_data.gpsSyncBits;
+        Serial.printf("incrementing sync bits: %i\n", gps_data.gpsSyncBits);
+      }
+    }
+
     while (Serial1.available()) {  // Check if data is available from the GPS module
       int c = Serial1.read();
       if (c == -1) {
         break;
       }
+      s.concat(char(c));
       if (!gps.encode(c)) {
         continue;
       }
+
+      if (s.startsWith(String("\n$GPGGA"))) {
+        s = s.substring(1);
+        Serial.println(s);
+      }
+      // Serial.printf("%i\n", s[0]);
+      s.clear();
 
       if (gps.time.isUpdated()) {
         gps_data.hours = gps.time.hour();
         gps_data.minutes = gps.time.minute();
         gps_data.seconds = gps.time.second();
         gps_data.milliseconds = gps.time.centisecond() * 10;
-        gps_data.gpsSyncBits = gps.time.hour() & 0x7;
+
+        // if (gps_data.seconds % 10 == 0) {
+        //   count++;
+        //   gps_data.gpsSyncBits = count;
+        // }
+
+        if (!gps_data.gpsSyncBitsInit) {
+          gps_data.gpsSyncBitsInit = true;
+          gps_data.gpsSyncBits = gps.time.hour();
+        }
+
+        // if (gps_data.seconds % 10 == 0) {
+        //   ++gps_data.gpsSyncBits;
+        // }
+
+        // if (gps_data.hours != gps.time.hour()) {
+        //   ++gps_data.gpsSyncBits;
+        // }
+
+        // gps_data.gpsSyncBits = gps.time.hour() & 0x7;
+        // gps_data.gpsSyncBits = (gps_data.gpsSyncBits + 1) & 0x7;
+        // gps_data.gpsSyncBits = 1;  // gps.time.hour() & 0x7;
+        // Serial.printf("gpsSyncBits %i\n", gps_data.gpsSyncBits);
+        // Serial.printf("hours %i\n", gps_data.hours);
       }
 
-      if (gps.date.isUpdated()) {
-        gps_data.dateAndHour = (gps.date.year() * 8928) + ((gps.date.month() - 1) * 744) + ((gps.date.day() - 1) * 24) + gps_data.hours;
+      bool have_date = false;
+      if (gps.date.isUpdated() && gps.time.isValid()) {
+        // Serial.printf("year %u\n", gps.date.year());
+        // gps_data.dateAndHour = (uint32_t(gps.date.year() - 2000) * 8928) + (uint32_t(gps.date.month() - 1) * 744) + (uint32_t(gps.date.day() - 1) * 24) + gps_data.hours;
+        uint32_t dateAndHour = (uint32_t(gps.date.year() - 2000) * 8928) + (uint32_t(gps.date.month() - 1) * 744) + (uint32_t(gps.date.day() - 1) * 24) + gps_data.hours;
+        if (gps_data.dateAndHour != dateAndHour) {
+          ++gps_data.gpsSyncBits;
+          gps_data.dateAndHour = dateAndHour;
+        }
+        have_date = true;
       }
 
       if (gps.satellites.isUpdated()) {
@@ -565,26 +705,74 @@ void taskReadGPS(void *) {
         gps_data.courseOverGround = gps.course.value();
       }
 
-      if (gps.hdop.isUpdated()) {
-        gps_data.hdop = gps.hdop.value() / 10.;
+      // if (gps.hdop.isUpdated()) {
+      //   Serial.printf("hdop: %s\n", hdop.value());
+      //   gps_data.hdop = gps.hdop.value() / 10.;
+      // }
+
+      // if (vdop1.isUpdated()) {
+      //   gps_data.vdop = vdop1.vdop() / 10.;
+      // }
+
+      if (vdop.isUpdated()) {
+        // Serial.printf("vdop: %s\n", vdop.value());
+        gps_data.vdop = atof(vdop.value()) * 10.f;
       }
 
-      if (vdop1.isUpdated()) {
-        gps_data.vdop = vdop1.vdop() / 10.;
+      if (hdop.isUpdated()) {
+        // Serial.printf("hdop: %s\n", hdop.value());
+        gps_data.hdop = atof(hdop.value()) * 10.f;
       }
 
+      bool location_updated = false;
       if (gps.location.isUpdated()) {
-        gps_data.latitude = gps.location.lat() * 10000000.;
-        gps_data.longitude = gps.location.lng() * 10000000.;
-        gps_data.fixQuality = gps.location.FixQuality();
-        if (xQueueSend(xQueueGps, &gps_data, 0)) {
+        location_updated = true;
+        gps_data.fixQuality = char(gps.location.FixQuality()) - '0';
+        if (gps_data.fixQuality > 0) {
+          gps_data.latitude = gps.location.lat() * 10000000.;
+          gps_data.longitude = gps.location.lng() * 10000000.;
+        } else {
+          gps_data.resetLocation();
+        }
+
+
+
+        // Serial.printf("fixQuality: %i\n", gps_data.fixQuality);
+        // if (have_date) {
+        // if (gps.time.isValid() && gps.date.isValid() && gps.location.isValid() && gps_data.fixQuality > 0) {
+        // if (gps.time.isValid() && gps.date.isValid()) {
+        //   // if (gps.time.isValid() && gps.date.isValid() && gps.location.isValid()
+        //   //     && hdop.isValid() && vdop.isValid() && gps.satellites.isValid()
+        //   //     && gps.speed.isValid() && gps.course.isValid() && gps.altitude.isValid()
+        //   // && gps_data.fixQuality > 0) {
+        //   // ) {
+        //   // if (gps_data.fixQuality > 0) {
+        //   // Serial.println("Have valid signal");
+        //   // if (xQueueSend(xQueueGps, &gps_data, 0)) {
+        //   if (xQueueSend(xQueueCombined, &combined, 0)) {
+        //     ++gps_queue_enqueue_count;
+        //   } else {
+        //     ++gps_queue_full_count;
+        //   }
+        // }
+      }
+      gps_line_read_count = gps.passedChecksum();
+      gps_line_invalid_count = gps.failedChecksum();
+
+
+      if (location_updated && gps.time.isValid() && gps.date.isValid()) {
+        if (xQueueSend(xQueueCombined, &combined, 0)) {
           ++gps_queue_enqueue_count;
         } else {
           ++gps_queue_full_count;
         }
-        gps_line_read_count = gps.sentencesWithFix();
-        gps_line_invalid_count = gps.failedChecksum();
       }
+
+      // if (xQueueSend(xQueueCombined, &combined, 0)) {
+      //   ++gps_queue_enqueue_count;
+      // } else {
+      //   ++gps_queue_full_count;
+      // }
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
@@ -611,6 +799,13 @@ esp_err_t queue_setup() {
   }
   xQueueGps = xQueueCreate(8, sizeof(GpsData));
   if (xQueueGps == 0) {
+    ESP_LOGE(TAG, "failed queue setup");
+    return ESP_FAIL;
+  }
+
+  // TODO: Use one unified queue
+  xQueueCombined = xQueueCreate(16, sizeof(xQueueItem));
+  if (xQueueCombined == 0) {
     ESP_LOGE(TAG, "failed queue setup");
     return ESP_FAIL;
   }
