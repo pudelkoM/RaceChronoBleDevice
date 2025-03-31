@@ -1,4 +1,4 @@
-# CAN Bus Data Logger for RaceChrono
+# CAN Bus Data Logger and GPS for RaceChrono
 
 This project is a high-speed CAN-Bus datalogger and GPS for a BMW Z4 E85.
 It integrates into the onboard network and feeds data to
@@ -21,7 +21,11 @@ It integrates into the onboard network and feeds data to
 - Tulay's Wire Werks [E46 CAN-Bus Plug and Play Adapter](https://tulayswirewerks.com/product/e46-can-bus-plug-and-play-adapter-4-pin-ign/)
 - [3D printed enclosure](3d_printing) (SLS nylon)
 
-## Pictures
+## Pictures and Videos
+
+[![img](https://img.youtube.com/vi/Rh_8cXntPHk/0.jpg)](https://www.youtube.com/watch?v=Rh_8cXntPHk)
+
+[![img](https://img.youtube.com/vi/qSwpusbHHVU/0.jpg)](https://www.youtube.com/watch?v=qSwpusbHHVU)
 
 ![img](images/plug.jpg)
 
