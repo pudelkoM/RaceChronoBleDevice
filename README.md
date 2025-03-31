@@ -6,10 +6,10 @@ It integrates into the onboard network and feeds data to
 
 ## TODOs
 
-- [ ] High-speed GPS module
-- [ ] Upload 3d printed enclosure .stl files and pictures
+- [x] High-speed GPS module
+- [x] Upload 3d printed enclosure .stl files and pictures
 - [ ] Bluetooth security
-- [ ] Update rate improvements
+- [x] Update rate improvements
   - [ ] Merge CAN messages?
 - [x] XY-Axis acceleration data
   - [ ] Formulas/decoding needs to be fixed
