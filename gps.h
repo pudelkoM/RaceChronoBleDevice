@@ -6,7 +6,6 @@
 
 struct GpsData {
   // RaceChrono specific data.
-  bool gpsSyncBitsInit;
   uint8_t gpsSyncBits;
   uint32_t dateAndHour;
 
@@ -36,7 +35,7 @@ struct GpsData {
   uint8_t vdop;  // vdop * 10
 
   GpsData()
-    : gpsSyncBitsInit(false), gpsSyncBits(), dateAndHour(), hours(), minutes(), seconds(), milliseconds(),
+    : gpsSyncBits(), dateAndHour(), hours(), minutes(), seconds(), milliseconds(),
       latitude(0x7FFFFFFF), longitude(0x7FFFFFFF), fixQuality(0x00), numberOfSatellites(0x3F),
       altitude(0xFFFF), speedOverGround(0xFFFF), courseOverGround(0xFFFF), hdop(0xFF), vdop(0xFF) {}
 
