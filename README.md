@@ -41,6 +41,23 @@ roughly in order of importance:
 - Set the TX power to a high enough setting, depending on distance to phone
 - Filter out uninteresting CAN ARBIDs in hardware
 
+## Accelerometer data from CAN ASC3 (0x1F3/499) message
+
+```
+8 byte ASC3 CAN payload:
+    A  B  C  D  E  F  G  H
+0x 00 00 00 00 00 00 00 00
+
+Longitudinal (Y axis, forward/backward, in m/s^2): ((((E & 0x03) << 8) | D) - 512) / 32.
+
+Lateral (X axis, sideways, in m/s^2): (((F << 2) | ((E & 0xC0) >> 6)) - 512) / 20.
+```
+
+TODO:
+ - [ ] RC screenshot
+
+[MS43 Wiki CAN ASC3](https://www.ms4x.net/index.php?title=CAN_Bus_ID_0x1F3_ASC3)
+
 ## Android connection priority / BLE connection interval
 
 _Note: this section is outdated. There is an API for setting the connection
