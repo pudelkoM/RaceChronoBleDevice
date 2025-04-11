@@ -10,7 +10,7 @@ This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates 
 - [ ] Update rate improvements
   - [ ] Merge CAN messages?
 - [x] XY-Axis acceleration data
-  - [ ] Formulas/decoding needs to be fixed
+  - [x] Formulas/decoding needs to be fixed
 
 ## BoM
 
@@ -55,7 +55,7 @@ Lateral (X axis, sideways, in m/s^2): (((F << 2) | ((E & 0xC0) >> 6)) - 512) / 2
 
 ![img](images/can%20accel%20data.png)
 
-[MS43 Wiki CAN ASC3](https://www.ms4x.net/index.php?title=CAN_Bus_ID_0x1F3_ASC3)
+Reference: [MS43 Wiki CAN ASC3](https://www.ms4x.net/index.php?title=CAN_Bus_ID_0x1F3_ASC3)
 
 ## Android connection priority / BLE connection interval
 
@@ -94,3 +94,4 @@ Here are the different rates observed with different settings:
 ## Credits / References
 - https://github.com/autosportlabs/ESP32-CAN-X2
 - https://github.com/aollin/racechrono-ble-diy-device
+- https://www.ms4x.net
