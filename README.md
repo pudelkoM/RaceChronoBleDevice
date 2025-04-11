@@ -53,8 +53,7 @@ Longitudinal (Y axis, forward/backward, in m/s^2): ((((E & 0x03) << 8) | D) - 51
 Lateral (X axis, sideways, in m/s^2): (((F << 2) | ((E & 0xC0) >> 6)) - 512) / 20.
 ```
 
-TODO:
- - [ ] RC screenshot
+![img](images/can%20accel%20data.png)
 
 [MS43 Wiki CAN ASC3](https://www.ms4x.net/index.php?title=CAN_Bus_ID_0x1F3_ASC3)
 
