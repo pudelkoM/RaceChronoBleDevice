@@ -1,13 +1,15 @@
-# CAN Bus Data Logger for RaceChrono
+# CAN Bus Data Logger and GPS for RaceChrono
 
-This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates into the onboard network and feeds data to [RaceChrono](https://racechrono.com/) over Bluetooth Low Energy (BLE).
+This project is a high-speed CAN-Bus datalogger and GPS for a BMW Z4 E85.
+It integrates into the onboard network and feeds data to
+[RaceChrono](https://racechrono.com/) over Bluetooth Low Energy (BLE).
 
 ## TODOs
 
-- [ ] High-speed GPS module
-- [ ] Upload 3d printed enclosure .stl files and pictures
+- [x] High-speed GPS module
+- [x] Upload 3d printed enclosure .stl files and pictures
 - [ ] Bluetooth security
-- [ ] Update rate improvements
+- [x] Update rate improvements
   - [ ] Merge CAN messages?
 - [x] XY-Axis acceleration data
   - [x] Formulas/decoding needs to be fixed
@@ -15,16 +17,27 @@ This project is a high-speed CAN-Bus datalogger for a BMW Z4 E85. It integrates 
 ## BoM
 
 - ASL [ESP32-CAN-X2](https://www.autosportlabs.com/product/esp32-can-x2-dual-can-bus-automotive-grade-development-board/)
+- ASL [GPS Add-On](https://www.autosportlabs.com/product/gps-bolt-on/)
 - Tulay's Wire Werks [E46 CAN-Bus Plug and Play Adapter](https://tulayswirewerks.com/product/e46-can-bus-plug-and-play-adapter-4-pin-ign/)
 - [3D printed enclosure](3d_printing) (SLS nylon)
 
-## Pictures
+## Pictures and Videos
+
+[![img](https://img.youtube.com/vi/Rh_8cXntPHk/0.jpg)](https://www.youtube.com/watch?v=Rh_8cXntPHk)
+
+[![img](https://img.youtube.com/vi/qSwpusbHHVU/0.jpg)](https://www.youtube.com/watch?v=qSwpusbHHVU)
 
 ![img](images/plug.jpg)
 
 ![img](images/can_wires.jpg)
 
 ![img](images/racechrono_fast.png)
+
+![img](https://docs.google.com/drawings/d/e/2PACX-1vSVjuSezY-joZCZgl_R_zPmTQYbc_-TqSy_Q0knpW5s3iARCcFFT7KGAUqVmtVJHk40MIxYjNcEZayh/pub?w=463&h=393)
+
+![img](images/gps_motorcycle.jpg)
+
+GPS module on the back of a Yamaha R6. No CAN input, obviously.
 
 ## Achieving high BLE notification throughput
 

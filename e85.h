@@ -30,7 +30,7 @@ static constexpr uint32_t can_dme4_freq = 1;  // 10ms native
 static constexpr uint32_t can_icl3_freq = 1;  // 200ms native
 static constexpr uint32_t can_default_freq = 1;
 
-uint16_t get_notify_interval_ms(uint32_t pid) {
+static uint16_t get_notify_interval_ms(uint32_t pid) {
   switch (pid) {
     case can_asc1_id: return 1000 / can_asc1_freq;
     case can_asc2_id: return 1000 / can_asc2_freq;
@@ -44,6 +44,75 @@ uint16_t get_notify_interval_ms(uint32_t pid) {
     case can_icl3_id: return 1000 / can_icl3_freq;
     default: return 1000 / can_default_freq;
   }
+}
+
+// Half rate CAN PID filter.
+static bool canPidAllowed(uint32_t pid) {
+  switch (pid) {
+    case can_asc1_id:
+      {
+        static uint16_t asc1_count = 0;
+        ++asc1_count;
+        return (asc1_count & 0x1) == 0;
+      }
+    case can_asc2_id:
+      {
+        static uint16_t asc2_count = 0;
+        ++asc2_count;
+        return (asc2_count & 0x1) == 0;
+      }
+    case can_asc3_id:
+      {
+        static uint16_t asc3_count = 0;
+        ++asc3_count;
+        return (asc3_count & 0x1) == 0;
+      }
+    case can_asc4_id:
+      {
+        static uint16_t asc4_count = 0;
+        ++asc4_count;
+        return (asc4_count & 0x1) == 0;
+      }
+    case can_lws1_id:
+      {
+        static uint16_t lws1_count = 0;
+        ++lws1_count;
+        return (lws1_count & 0x1) == 0;
+      }
+    case can_dme1_id:
+      {
+        static uint16_t dme1_count = 0;
+        ++dme1_count;
+        return (dme1_count & 0x1) == 0;
+      }
+    case can_dme2_id:
+      {
+        static uint16_t dme2_count = 0;
+        ++dme2_count;
+        return (dme2_count & 0x1) == 0;
+      }
+    case can_dme3_id:
+      {
+        static uint16_t dme3_count = 0;
+        ++dme3_count;
+        return (dme3_count & 0x1) == 0;
+      }
+    case can_dme4_id:
+      {
+        static uint16_t dme4_count = 0;
+        ++dme4_count;
+        return (dme4_count & 0x1) == 0;
+      }
+    case can_icl3_id:
+      {
+        static uint16_t icl3_count = 0;
+        ++icl3_count;
+        return (icl3_count & 0x1) == 0;
+      }
+      return true;
+  }
+
+  return false;
 }
 
 static void get_can_asc1_msg2(twai_message_t* msg, int speed_kmh) {
