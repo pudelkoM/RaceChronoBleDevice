@@ -10,12 +10,11 @@
 #include <esp_log.h>
 #include "esp_gatt_common_api.h"
 
-static const char *TAG = "racechrono_canbus_ble";
-
 #define CAN_POLLING_RATE_MS 1
 #define SERVICE_UUID "00001ff8-0000-1000-8000-00805f9b34fb"
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 
+static const char *TAG = "racechrono_canbus_ble";
 bool canBusAllowUnknownPackets = false;
 bool isCanBusConnected = false;
 bool isBleConnected = false;
@@ -301,7 +300,7 @@ void sendGpsMsgBle(struct GpsData &data) {
   time_buf[2] = data.dateAndHour & 0xFF;
   cbGpsTimeChar->setValue(time_buf, sizeof(time_buf));
   // No notification needed. RC will read value when required.
-  cbGpsTimeChar->notify();
+  // cbGpsTimeChar->notify();
 }
 
 void canBusSetup() {
