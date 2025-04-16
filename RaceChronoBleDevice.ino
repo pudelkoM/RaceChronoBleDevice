@@ -301,7 +301,7 @@ void sendGpsMsgBle(struct GpsData &data) {
   time_buf[2] = data.dateAndHour & 0xFF;
   cbGpsTimeChar->setValue(time_buf, sizeof(time_buf));
   // No notification needed. RC will read value when required.
-  cbGpsTimeChar->notify();
+  // cbGpsTimeChar->notify();
 }
 
 void canBusSetup() {
