@@ -20,11 +20,6 @@ struct GpsData {
   uint8_t fixQuality;
   uint8_t numberOfSatellites;
   uint16_t altitude;
-  // String altitudeUnits;
-  // String geoidalSeparation;
-  // String geoidalSeparationUnits;
-  // String ageOfDifferentialGPSData;
-  // String differentialReferenceStationID;
 
   // GPRMC
   uint16_t speedOverGround;   // km/h * 100

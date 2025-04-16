@@ -46,6 +46,7 @@ static uint16_t get_notify_interval_ms(uint32_t pid) {
   }
 }
 
+// Half rate CAN PID filter.
 static bool canPidAllowed(uint32_t pid) {
   switch (pid) {
     case can_asc1_id:

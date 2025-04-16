@@ -23,8 +23,6 @@ uint16_t conn_id = 0;  // Only valid when isBleConnected is true.
 BLECharacteristic *cbMainChar = nullptr;
 BLECharacteristic *cbGpsMainChar = nullptr;
 BLECharacteristic *cbGpsTimeChar = nullptr;
-QueueHandle_t xQueueCan;
-QueueHandle_t xQueueGps;
 QueueHandle_t xQueueCombined;
 TinyGPSPlus gps;
 TinyGPSCustom hdop(gps, "GPGSA", 16);
@@ -251,12 +249,6 @@ void sendGpsMsgBle(struct GpsData &data) {
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
 
-  // Serial.flush();
-  // ESP_LOGI(TAG, "sending: time %02i:%02i:%02i, sync %i, date %i, longitude %i, latitude %i, fixq %i, sats %i\n",
-  //          data.hours, data.minutes, data.seconds, data.gpsSyncBits, data.dateAndHour,
-  //          data.longitude, data.latitude, data.fixQuality, data.numberOfSatellites);
-  // Serial.flush();
-
   uint8_t buf[20] = {};
 
   // Sync bits and time from hour start
@@ -301,8 +293,6 @@ void sendGpsMsgBle(struct GpsData &data) {
   cbGpsMainChar->setValue(buf, sizeof(buf));
   cbGpsMainChar->notify();
   ++ble_notify_count;
-  // hexDump(buf, sizeof(buf));
-
 
   // Update the GPS time characteristic.
   uint8_t time_buf[3] = {};
@@ -312,7 +302,6 @@ void sendGpsMsgBle(struct GpsData &data) {
   cbGpsTimeChar->setValue(time_buf, sizeof(time_buf));
   // No notification needed. RC will read value when required.
   cbGpsTimeChar->notify();
-  // hexDump(time_buf, sizeof(time_buf));
 }
 
 void canBusSetup() {
@@ -490,7 +479,6 @@ void taskCanBusLoop(void *) {
 
     xQueueItem combined = {};
     combined.type = xQueueItem::twai;
-    // twai_message_t message;
     while (twai_receive(&combined.data.twai_message, pdMS_TO_TICKS(CAN_POLLING_RATE_MS)) == ESP_OK) {
       ++can_rx_count;
       if (combined.data.twai_message.rtr) {
@@ -501,7 +489,6 @@ void taskCanBusLoop(void *) {
         ++can_not_interested_count;
         continue;
       }
-      // if (xQueueSend(xQueueCan, &message, 0)) {
       if (xQueueSend(xQueueCombined, &combined, 0)) {
         ++can_queue_enqueue_count;
       } else {
@@ -512,8 +499,6 @@ void taskCanBusLoop(void *) {
 }
 
 void taskSendBle(void *) {
-  // twai_message_t message;
-  // GpsData gps_data;
   xQueueItem combined;
   for (;;) {
     if (xQueueReceive(xQueueCombined, &combined, pdMS_TO_TICKS(1000))) {
@@ -526,19 +511,6 @@ void taskSendBle(void *) {
           break;
       }
     }
-
-    // if (uxQueueMessagesWaiting(xQueueCan) + uxQueueMessagesWaiting(xQueueGps) == 0) {
-    //   vTaskDelay(pdMS_TO_TICKS(1));
-    //   continue;
-    // }
-
-    // // TODO: try zero timeouts on queue reads.
-    // if (xQueueReceive(xQueueCan, &message, pdMS_TO_TICKS(0))) {
-    //   sendCanMsgBle(message.identifier, message.data, message.data_length_code);
-    // }
-    // if (xQueueReceive(xQueueGps, &gps_data, pdMS_TO_TICKS(0))) {
-    //   sendGpsMsgBle(gps_data);
-    // }
   }
 }
 
@@ -569,7 +541,6 @@ void taskReadGPS(void *) {
   // Serial1.write(set_gps_rate_1, sizeof(set_gps_rate_1));
   delay(1000);
 
-  // GpsData gps_data;
   xQueueItem combined;
   combined.type = xQueueItem::gps;
   GpsData &gps_data = combined.data.gps_data;
@@ -580,23 +551,14 @@ void taskReadGPS(void *) {
       continue;
     }
 
-    String s;
-
     while (Serial1.available()) {  // Check if data is available from the GPS module
       int c = Serial1.read();
       if (c == -1) {
         break;
       }
-      // s.concat(char(c));
       if (!gps.encode(c)) {
         continue;
       }
-
-      // if (s.startsWith(String("\n$GPGGA"))) {
-      //   s = s.substring(1);
-      //   // Serial.println(s);
-      // }
-      // s.clear();
 
       if (gps.time.isUpdated()) {
         gps_data.hours = gps.time.hour();
@@ -605,14 +567,12 @@ void taskReadGPS(void *) {
         gps_data.milliseconds = gps.time.centisecond() * 10;
       }
 
-      bool have_date = false;
       if (gps.date.isUpdated() && gps.time.isValid()) {
         uint32_t dateAndHour = (uint32_t(gps.date.year() - 2000) * 8928) + (uint32_t(gps.date.month() - 1) * 744) + (uint32_t(gps.date.day() - 1) * 24) + gps_data.hours;
         if (gps_data.dateAndHour != dateAndHour) {
           ++gps_data.gpsSyncBits;
           gps_data.dateAndHour = dateAndHour;
         }
-        have_date = true;
       }
 
       if (gps.satellites.isUpdated()) {
@@ -677,18 +637,6 @@ void taskPrintStats(void *) {
 }
 
 esp_err_t queue_setup() {
-  xQueueCan = xQueueCreate(8, sizeof(twai_message_t));
-  if (xQueueCan == 0) {
-    ESP_LOGE(TAG, "failed queue setup");
-    return ESP_FAIL;
-  }
-  xQueueGps = xQueueCreate(8, sizeof(GpsData));
-  if (xQueueGps == 0) {
-    ESP_LOGE(TAG, "failed queue setup");
-    return ESP_FAIL;
-  }
-
-  // TODO: Use one unified queue
   xQueueCombined = xQueueCreate(16, sizeof(xQueueItem));
   if (xQueueCombined == 0) {
     ESP_LOGE(TAG, "failed queue setup");
