@@ -647,22 +647,6 @@ esp_err_t queue_setup() {
 }
 
 
-// #define TEST
-#ifdef TEST
-#include <unity.h>
-void setup() {
-  Serial.begin(115200);
-  while (!Serial) {
-    delay(500);
-  }
-  esp_log_level_set("*", ESP_LOG_INFO);
-  esp_log_level_set(TAG, ESP_LOG_DEBUG);
-
-  UNITY_BEGIN();
-  // RUN_TEST(test_convertToDecimalDegrees);
-  UNITY_END();
-}
-#else
 void setup() {
   Serial.begin(115200);
   esp_log_level_set("*", ESP_LOG_INFO);
@@ -677,7 +661,6 @@ void setup() {
   xTaskCreatePinnedToCore(taskReadGPS, "GPS reader", 16384, nullptr, 2, nullptr, 1);
   xTaskCreatePinnedToCore(taskPrintStats, "Statistics printer", 16384, nullptr, 1, nullptr, 1);
 }
-#endif
 
 void loop() {
   delay(1000000);
