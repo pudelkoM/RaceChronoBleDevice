@@ -6,9 +6,10 @@ It integrates into the onboard network and feeds data to
 
 ## TODOs
 
+- [ ] Gear indicator
+- [ ] Bluetooth security
 - [x] High-speed GPS module
 - [x] Upload 3d printed enclosure .stl files and pictures
-- [ ] Bluetooth security
 - [x] Update rate improvements
   - [ ] Merge CAN messages?
 - [x] XY-Axis acceleration data
@@ -29,7 +30,7 @@ CAN data logger in action at Thunderhill West.
 
 [![img](https://img.youtube.com/vi/qSwpusbHHVU/0.jpg)](https://www.youtube.com/watch?v=qSwpusbHHVU)
 
-GPS module in action on a Yamaha R6 at Thuderhill East. 
+GPS module in action on a Yamaha R6 at Thuderhill East.
 
 ![img](images/plug.jpg)
 
