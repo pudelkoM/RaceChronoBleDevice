@@ -1,20 +1,21 @@
 # CAN Bus Data Logger and GPS for RaceChrono
 
-This project is a high-speed CAN-Bus datalogger and GPS for a BMW Z4 E85.
+This project is a high-speed CAN-Bus datalogger and >10Hz GPS for the BMW Z4 E85.
 It integrates into the onboard network and feeds data to
 [RaceChrono](https://racechrono.com/) over Bluetooth Low Energy (BLE).
 
 ## TODOs
 
+- [ ] Gear indicator
+- [ ] Bluetooth security
 - [x] High-speed GPS module
 - [x] Upload 3d printed enclosure .stl files and pictures
-- [ ] Bluetooth security
 - [x] Update rate improvements
   - [ ] Merge CAN messages?
 - [x] XY-Axis acceleration data
   - [x] Formulas/decoding needs to be fixed
 
-## BoM
+## Bill of Materials
 
 - ASL [ESP32-CAN-X2](https://www.autosportlabs.com/product/esp32-can-x2-dual-can-bus-automotive-grade-development-board/)
 - ASL [GPS Add-On](https://www.autosportlabs.com/product/gps-bolt-on/)
@@ -25,7 +26,11 @@ It integrates into the onboard network and feeds data to
 
 [![img](https://img.youtube.com/vi/Rh_8cXntPHk/0.jpg)](https://www.youtube.com/watch?v=Rh_8cXntPHk)
 
+CAN data logger in action at Thunderhill West.
+
 [![img](https://img.youtube.com/vi/qSwpusbHHVU/0.jpg)](https://www.youtube.com/watch?v=qSwpusbHHVU)
+
+GPS module in action on a Yamaha R6 at Thuderhill East.
 
 ![img](images/plug.jpg)
 
@@ -55,6 +60,15 @@ roughly in order of importance:
 - Filter out uninteresting CAN ARBIDs in hardware
 
 ## Accelerometer data from CAN ASC3 (0x1F3/499) message
+
+The traction and stability control module (DSC/ASC) in the Z4 comes
+with a 2D accleration sensor. Its data is transmitted over the CAN
+bus as part of the 0x1F3/499 message. While the specific fields/bytes
+containing the X and Y acceleration data are known, the exact
+conversion formulae are not. The following is my attempt at parsing
+the data experimentally, based on traces recorded in a controlled
+environment (a parking lot) and correlating the data with the
+accelerometer in my phone.
 
 ```
 8 byte ASC3 CAN payload:
